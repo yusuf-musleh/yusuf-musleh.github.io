@@ -1,12 +1,632 @@
-<!DOCTYPE html PUBLIC "-//IETF//DTD HTML 2.0//EN">
-<HTML>
-   <HEAD>
-      <TITLE>
-         Hello World! 
-      </TITLE>
-   </HEAD>
-<BODY>
-   <H1>Hi</H1>
-   <P>This is testing webpage for my personal website!</P> 
-</BODY>
-</HTML>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Yusuf Musleh</title>
+
+    <!-- Migrating Lastest jQuery-->
+<!--     // <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
+    // <script src="//code.jquery.com/jquery-migrate-1.2.1.min.js"></script> -->
+    <script src="//code.jquery.com/jquery-2.1.4.min.js"></script>
+
+    <!-- Interactive Background -->
+    <script src="js/jquery.interactive_bg.js"></script>
+    <script src="js/jquery.interactive_bg.min.js"></script>
+    <script src="js/animate_logo.js"></script>
+
+    <!-- PDFObject JS (for displaying resume) -->
+    <script type="text/javascript" src="js/pdfobject_source.js"></script>
+
+    <!-- Bootstrap Core CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="css/agency.css" rel="stylesheet">
+
+    <!-- Custom Fonts -->
+    <link href="font-awesome/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet" type="text/css">
+    <link href='https://fonts.googleapis.com/css?family=Black+Ops+One' rel='stylesheet' type='text/css'>
+    <link href='https://fonts.googleapis.com/css?family=Audiowide' rel='stylesheet' type='text/css'>
+    <!-- <link href='https://fonts.googleapis.com/css?family=Kaushan+Script' rel='stylesheet' type='text/css'> -->
+    <link href='https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='https://fonts.googleapis.com/css?family=Roboto+Slab:400,100,300,700' rel='stylesheet' type='text/css'>
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+
+</head>
+
+<body id="page-top" class="index">
+
+    <!-- Navigation -->
+    <nav class="navbar navbar-default navbar-fixed-top">
+        <div class="container">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand page-scroll" href="#page-top">Yusuf Musleh</a>
+            </div>
+
+            <!-- Collect the nav links, forms, and other content for toggling -->
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    <li class="hidden">
+                        <a href="#page-top"></a>
+                    </li>
+                    <li>
+                        <a class="page-scroll" href="#aboutMe">About Me</a>
+                    </li>
+                    <li>
+                        <a class="page-scroll" href="#portfolio">Portfolio</a>
+                    </li>
+                    <li>
+                        <a class="page-scroll" href="#resume">Resume</a>
+                    </li>
+<!--                     <li>
+                        <a class="page-scroll" href="#team">Team</a>
+                    </li> -->
+                    <li>
+                        <a class="page-scroll" href="#contact">Contact</a>
+                    </li>
+                </ul>
+            </div>
+            <!-- /.navbar-collapse -->
+        </div>
+        <!-- /.container-fluid -->
+    </nav>
+
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <div class="intro-text">
+				<!-- <img class="logo" src="/img/Logo.png" alt="Logo"> -->
+                <div class="bg" id="interact_logo" data-ibg-bg="/img/Logo.png"></div>
+
+                <div class="intro-lead-in">I am a <b>Computer Science</b> Senior at <br><br> <b>Carnegie Mellon Universtiy</div>
+                <!-- <div class="intro-lead-in"><b>Carnegie Mellon Universtiy</b></div> -->
+                <!-- <div class="intro-heading">It's Nice To Meet You</div> -->
+                <a href="#aboutMe" class="page-scroll btn btn-xl">Tell Me More</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Services Section -->
+    <section id="aboutMe">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <h2 class="section-heading">About Me</h2>
+                    <h3 class="section-subheading text-muted">I am currently in my final year at CMU, and exploring different opportunties to jump start my career.<br><br> I've developed a wide range of skills throughout my time at CMU:</h3>
+                </div>
+            </div>
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <span class="fa-stack fa-4x">
+                        <!-- <i class="fa fa-circle fa-stack-2x text-primary"></i> -->
+                        <i class="fa fa-laptop fa-stack-2x text-primary"></i>
+                    </span>
+                    <h4 class="service-heading">Systems and Software Programming</h4>
+                    <p class="text-muted">I've taken a quite a few Computer Systems courses. From the micro world of Embedded Systems, to a world that speaks only of parallelism and scalability, Distributed Systems.</p>
+                </div>
+                <div class="col-md-4">
+                    <span class="fa-stack fa-4x">
+                        <!-- <i class="fa fa-circle fa-stack-2x text-primary"></i> -->
+                        <i class="fa fa-code fa-stack-2x text-primary"></i>
+                    </span>
+                    <h4 class="service-heading">Web Application Development</h4>
+                    <p class="text-muted">Taking the Web Development course was only the beginning of my journey in Web Dev. I've worked on many web apps, ranging from course projects, personal projects, and even startups!</p>
+                </div>
+                <div class="col-md-4">
+                    <span class="fa-stack fa-4x">
+                        <!-- <i class="fa fa-circle fa-stack-2x text-primary"></i> -->
+                        <i class="fa fa-cogs fa-stack-2x text-primary"></i>
+                    </span>
+                    <h4 class="service-heading">Learning and Problem Solving</h4>
+                    <p class="text-muted">Learning how to learn was a cruicial skill I learned from CMU. We're going to be faced with new problems everyday. I dive in, get my hands dirty and hack something out of it, I learn, I solve, I get things done.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Grid Section -->
+    <section id="portfolio" class="bg-light-gray">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <h2 class="section-heading">Portfolio</h2>
+                    <h3 class="section-subheading text-muted">A showcase of my Projects</h3>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal1" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/Jeebly2.png" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>Jeebly</h4>
+                        <p class="text-muted">Startup</p>
+                    </div>
+                </div>
+                <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal2" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/dfs2.png" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>FileStAck</h4>
+                        <p class="text-muted">Distributed File System</p>
+                    </div>
+                </div>
+                <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal3" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/freescale.jpg" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>Wifi controlled R/C Car</h4>
+                        <p class="text-muted">Embedded System</p>
+                    </div>
+                </div>
+                <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal4" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/majlis2.png" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>Majlis</h4>
+                        <p class="text-muted">Middle Eastern Reddit</p>
+                    </div>
+                </div>
+                <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal5" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/ita.png" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>Diaries of an IT Assistant</h4>
+                        <p class="text-muted">2D Platformer</p>
+                    </div>
+                </div>
+                <!-- <div class="col-md-4 col-sm-6 portfolio-item">
+                    <a href="#portfolioModal6" class="portfolio-link" data-toggle="modal">
+                        <div class="portfolio-hover">
+                            <div class="portfolio-hover-content">
+                                <i class="fa fa-plus fa-3x"></i>
+                            </div>
+                        </div>
+                        <img src="img/portfolio/dreams.png" class="img-responsive" alt="">
+                    </a>
+                    <div class="portfolio-caption">
+                        <h4>Dreams</h4>
+                        <p class="text-muted">Website Design</p>
+                    </div>
+                </div> -->
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="resume">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <h2 class="section-heading">Resume</h2>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-lg-12">
+                    <object data="CV.pdf" type="application/pdf" width="100%" height="1000px">
+                        <p>It appears you don't have a PDF plugin for this browser.
+                        No biggie... you can <a href="resume.pdf">click here to
+                        download the PDF file.</a></p>
+                    </object>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Team Section -->
+    <!-- <section id="team" class="bg-light-gray">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <h2 class="section-heading">Our Amazing Team</h2>
+                    <h3 class="section-subheading text-muted">Lorem ipsum dolor sit amet consectetur.</h3>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-4">
+                    <div class="team-member">
+                        <img src="img/team/1.jpg" class="img-responsive img-circle" alt="">
+                        <h4>Kay Garland</h4>
+                        <p class="text-muted">Lead Designer</p>
+                        <ul class="list-inline social-buttons">
+                            <li><a href="#"><i class="fa fa-twitter"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-facebook"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-linkedin"></i></a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="team-member">
+                        <img src="img/team/2.jpg" class="img-responsive img-circle" alt="">
+                        <h4>Larry Parker</h4>
+                        <p class="text-muted">Lead Marketer</p>
+                        <ul class="list-inline social-buttons">
+                            <li><a href="#"><i class="fa fa-twitter"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-facebook"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-linkedin"></i></a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="team-member">
+                        <img src="img/team/3.jpg" class="img-responsive img-circle" alt="">
+                        <h4>Diana Pertersen</h4>
+                        <p class="text-muted">Lead Developer</p>
+                        <ul class="list-inline social-buttons">
+                            <li><a href="#"><i class="fa fa-twitter"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-facebook"></i></a>
+                            </li>
+                            <li><a href="#"><i class="fa fa-linkedin"></i></a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 text-center">
+                    <p class="large text-muted">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut eaque, laboriosam veritatis, quos non quis ad perspiciatis, totam corporis ea, alias ut unde.</p>
+                </div>
+            </div>
+        </div>
+    </section> -->
+
+    <!-- Clients Aside -->
+    <!-- <aside class="clients">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-3 col-sm-6">
+                    <a href="#">
+                        <img src="img/logos/envato.jpg" class="img-responsive img-centered" alt="">
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="#">
+                        <img src="img/logos/designmodo.jpg" class="img-responsive img-centered" alt="">
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="#">
+                        <img src="img/logos/themeforest.jpg" class="img-responsive img-centered" alt="">
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <a href="#">
+                        <img src="img/logos/creative-market.jpg" class="img-responsive img-centered" alt="">
+                    </a>
+                </div>
+            </div>
+        </div>
+    </aside> -->
+
+    <!-- Contact Section -->
+    <section id="contact">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-12 text-center">
+                    <h2 class="section-heading">Contact Me</h2>
+                    <i class="fa fa-envelope fa-5x text-primary"></i>
+                    <h3 class="section-subheading" style="color: white">yusuf.musleh@gmail.com</h3>
+                    <a href="https://github.com/yusuf-musleh"><i class="fa fa-github fa-5x text-primary"></i>
+                    <h3 class="section-subheading" style="color: white">Github</h3>
+                </div>
+
+            </div>
+
+
+            <div class="row">
+                <div class="col-lg-12">
+                    <!-- <form name="sentMessage" id="contactForm" novalidate>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <input type="text" class="form-control" placeholder="Your Name *" id="name" required data-validation-required-message="Please enter your name.">
+                                    <p class="help-block text-danger"></p>
+                                </div>
+                                <div class="form-group">
+                                    <input type="email" class="form-control" placeholder="Your Email *" id="email" required data-validation-required-message="Please enter your email address.">
+                                    <p class="help-block text-danger"></p>
+                                </div>
+                                <div class="form-group">
+                                    <input type="tel" class="form-control" placeholder="Your Phone *" id="phone" required data-validation-required-message="Please enter your phone number.">
+                                    <p class="help-block text-danger"></p>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <textarea class="form-control" placeholder="Your Message *" id="message" required data-validation-required-message="Please enter a message."></textarea>
+                                    <p class="help-block text-danger"></p>
+                                </div>
+                            </div>
+                            <div class="clearfix"></div>
+                            <div class="col-lg-12 text-center">
+                                <div id="success"></div>
+                                <button type="submit" class="btn btn-xl">Send Message</button>
+                            </div>
+                        </div>
+                    </form> -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4">
+                    <span class="copyright">Copyright &copy; Yusuf Musleh 2015</span>
+                </div>
+                <div class="col-md-4">
+                    <!-- <ul class="list-inline social-buttons">
+                        <li><a href="#"><i class="fa fa-twitter"></i></a>
+                        </li>
+                        <li><a href="#"><i class="fa fa-facebook"></i></a>
+                        </li>
+                        <li><a href="#"><i class="fa fa-linkedin"></i></a>
+                        </li>
+                    </ul> -->
+                </div>
+                <div class="col-md-4">
+                    <!-- <ul class="list-inline quicklinks">
+                        <li><a href="#">Privacy Policy</a>
+                        </li>
+                        <li><a href="#">Terms of Use</a>
+                        </li>
+                    </ul> -->
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Portfolio Modals -->
+    <!-- The modals below showcase details about portfolio projects -->
+
+    <!-- Portfolio Modal 1 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal1" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <!-- Project Details Go Here -->
+                            <h2>Jeebly</h2>
+                            <p class="item-intro text-muted">An online ordering concierge service for students. Implemented with NodeJs and Bootstrap.</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/Jeebly.png" alt="">
+                            <p>Jeebly is an online platform that allows students around CMU-Qatar campus to purchase items online using cash and pay once they receive it. Its currently in its very initial stages, being developed by my team mates and I under a entrepreneurship course.</p>
+                            <p>
+                            <ul class="list-inline">
+                                <li>Date: October - November 2015</li>
+                            </ul>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal 2 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal2" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <h2>FileStAck</h2>
+                            <p class="item-intro text-muted">A Distributed File System implemented in Java.</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/dfs.png" alt="">
+                            <p>FileStAck was a project in the Distributed Systems class. I had to write the Remote Method Invocation (RMI), instead of using the Java RMI library. That was used in establishing the communcation between the clients, naming server, and storage servers. I also had to implement the replication and synchronization of files after new writes, for each client to read the lastest version of all files. FileStAck performs the basic functionality of a file system. Clients can read, write, create and delete files, with complete transperancy to the fact that the all data/files is distributed over multiple storage servers.</p>
+                            <ul class="list-inline">
+                                <li>Date: September 2015</li>
+                            </ul>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal 3 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal3" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <!-- Project Details Go Here -->
+                            <h2>Wifi controlled R/C Car</h2>
+                            <p class="item-intro text-muted">R/C car controlled over wifi network from laptop/computer. Implemented in C.</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/freescale2.jpg" alt="">
+                            <p>This was my final project in the Embedded Systems class. Programmed a microprocessor using the FreeScale microcontroller (shown above). It sends pulse signals of various widths to the servos controlling the car, depending on the command sent through wifi module (Xbee) connected to the computer and received by another wifi module connected to the mircroprocessor. The width of the pulse dictates the direction of movement of the car.</p>
+                            <ul class="list-inline">
+                                <li>Date: May 2015</li>
+                            </ul>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal 4 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal4" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <!-- Project Details Go Here -->
+                            <h2>Majlis</h2>
+                            <p class="item-intro text-muted">A reddit like bi-lingual forum tailored towards users in the Middle East. Implemented in python Django and bootstrap.</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/majlis.png" alt="">
+                            <p>This web application was developed for a startup in Qatar. I was on a team of 5 people, working mostly on the backend. I developed the 'moderator' functionality and made the interaction between the front and back ends seemless using Ajax. The website is still under developement, and expected to launch soon. It can easily be scaled thanks to caching and other cool stuff happening behind the scenes.</p>
+                            <ul class="list-inline">
+                                <li>Date: May - August 2015</li>
+                            </ul>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal 5 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal5" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <!-- Project Details Go Here -->
+                            <h2>Diaries of an IT Assistant</h2>
+                            <p class="item-intro text-muted">An infinite 2D platformer game. Implement in C# in Unity Game Engine</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/ita2.png" alt="">
+                            <p>This game was developed in 24 hours in the Carnegie Apps Hackathon 2015. We used Unity Game Engine, I worked on generating the infinite map/platforms and added the background music and sound effects.</p>
+                            <ul class="list-inline">
+                                <li>Date: January 2015</li>
+                            </ul>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal 6 -->
+    <div class="portfolio-modal modal fade" id="portfolioModal6" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-content">
+            <div class="close-modal" data-dismiss="modal">
+                <div class="lr">
+                    <div class="rl">
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-8 col-lg-offset-2">
+                        <div class="modal-body">
+                            <!-- Project Details Go Here -->
+                            <h2>Project Name</h2>
+                            <p class="item-intro text-muted">Lorem ipsum dolor sit amet consectetur.</p>
+                            <img class="img-responsive img-centered" src="img/portfolio/dreams-preview.png" alt="">
+                            <p>Dreams is a free PSD web template built by <a href="https://www.behance.net/MathavanJaya">Mathavan Jaya</a>. Dreams is a modern one page web template designed for almost any purpose. It’s a beautiful template that’s designed with the Bootstrap framework in mind.</p>
+                            <p>You can download the PSD template in this portfolio sample item at <a href="http://freebiesxpress.com/gallery/dreams-free-one-page-web-template/">FreebiesXpress.com</a>.</p>
+                            <button type="button" class="btn btn-primary" data-dismiss="modal"><i class="fa fa-times"></i> Close Project</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <!-- // <script src="js/jquery.js"></script> -->
+
+    <!-- Bootstrap Core JavaScript -->
+    <script src="js/bootstrap.min.js"></script>
+
+    <!-- Plugin JavaScript -->
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.3/jquery.easing.min.js"></script>
+    <script src="js/classie.js"></script>
+    <script src="js/cbpAnimatedHeader.js"></script>
+
+    <!-- Contact Form JavaScript -->
+    <script src="js/jqBootstrapValidation.js"></script>
+    <script src="js/contact_me.js"></script>
+
+    <!-- Custom Theme JavaScript -->
+    <script src="js/agency.js"></script>
+
+</body>
+
+</html>
