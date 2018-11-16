@@ -1,0 +1,61 @@
+body {
+    background-color: #0c0c0c;
+    font-family: "Courier New", Courier, monospace;
+}
+
+.logo-image {
+    margin-top: 40px;
+}
+
+.titles-row {
+    margin-top: 40px;
+}
+
+.icons-row {
+    margin-top: 40px;
+}
+
+.myname {
+    margin-top: 40px;
+    color: #ffffff;
+}
+
+.icons {
+    font-size: 36px;
+    color: #6c757d;
+}
+
+.icons:hover {
+    color: #ffffff;
+}
+
+.icon-link:hover {
+    text-decoration: none;
+}
+
+.verboze-link {
+    color: #6c757d;
+}
+
+.verboze-link:hover {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+@media (max-width: 1199px) {
+    h2 {
+        font-size: 29px;
+    }
+}
+
+@media (max-width: 991px) {
+    h2 {
+        font-size: 25px;
+    }
+}
+
+@media (max-width: 767px) {
+    h2 {
+        font-size: 22px;
+    }
+}
