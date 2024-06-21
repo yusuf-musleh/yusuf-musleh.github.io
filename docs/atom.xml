@@ -1,5 +1,129 @@
 <?xml version="1.0" encoding="utf8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Yusuf Musleh</title><link href="https://ymusleh.com/" rel="alternate"></link><link href="https://ymusleh.com/atom.xml" rel="self"></link><id>https://ymusleh.com/</id><updated>2023-02-08T12:00:00+00:00</updated><subtitle>thoughts and devlogs</subtitle><entry><title>Hello World!</title><link href="https://ymusleh.com/hello-world.html" rel="alternate"></link><published>2023-02-08T12:00:00+00:00</published><updated>2023-02-08T12:00:00+00:00</updated><author><name>Yusuf Musleh</name></author><id>tag:ymusleh.com,2023-02-08:/hello-world.html</id><summary type="html">Welcome to my new Website</summary><content type="html">&lt;h3&gt;Welcome to my new Website&lt;/h3&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Yusuf Musleh</title><link href="https://ymusleh.com/" rel="alternate"></link><link href="https://ymusleh.com/atom.xml" rel="self"></link><id>https://ymusleh.com/</id><updated>2024-06-21T12:00:00+00:00</updated><subtitle>thoughts and devlogs</subtitle><entry><title>Private-Public Key Encryption in Ethereum</title><link href="https://ymusleh.com/private-public-encryption-in-ethereum.html" rel="alternate"></link><published>2024-06-21T12:00:00+00:00</published><updated>2024-06-21T12:00:00+00:00</updated><author><name>Yusuf Musleh</name></author><id>tag:ymusleh.com,2024-06-21:/private-public-encryption-in-ethereum.html</id><summary type="html">An attempt to simplify and breakdown what they are and how they work together in the context of Ethereum.</summary><content type="html">&lt;p&gt;&lt;em&gt;An attempt to simplify and breakdown what they are and how they work together in the context of Ethereum.&lt;/em&gt;&lt;/p&gt;
+&lt;h3&gt;Brief Context&lt;/h3&gt;
+&lt;p&gt;There are 2 types of accounts in Ethereum; &lt;em&gt;externally owned accounts (EOA)&lt;/em&gt; and &lt;em&gt;smart contract accounts&lt;/em&gt;. To give you a quick 1-liner for each, EOAs are accounts that can perform basic transactions, whereas smart contract accounts contain code that can be executed and can hold storage.&lt;/p&gt;
+&lt;p&gt;They are similar in which they both can hold a balance of ETH, but are different in which only EAOs can initiate transactions on the network, whereas smart contract accounts &lt;em&gt;cannot&lt;/em&gt; initiate transactions themselves. They need to be called from an EAO or another smart contract that was in turn executed by an EAO.&lt;/p&gt;
+&lt;p&gt;Since EOAs initiate all the action on the network, they need to be secured. In other words, &lt;em&gt;only&lt;/em&gt; the person who is allowed to perform actions with that EOA should be able to do so. We’ll explore how this is achieved through &lt;strong&gt;Private-Public Key Encryption&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Every EOA has an address which is publicly available, since anyone can send ETH to that particular address. How is this public address generated? And how is it related to Private and Public Keys?&lt;/p&gt;
+&lt;h3&gt;What is a Private Key?&lt;/h3&gt;
+&lt;p&gt;A Private Key, is a randomly generated 2&lt;sup&gt;256&lt;/sup&gt; bit number. Which is basically an integer with 78 digits. Why is it 2&lt;sup&gt;256&lt;/sup&gt; bits? That’s the defined address space in Ethereum. To give you an idea of how large that number is, the &lt;a href="https://www.livescience.com/how-many-atoms-in-universe.html"&gt;estimated total number of atoms in the universe&lt;/a&gt; is 10&lt;sup&gt;82&lt;/sup&gt;, an integer with 83 digits. As you can see, the likeliness of a collision or running out of addresses is &lt;em&gt;extremely&lt;/em&gt; low (practically impossible) when generated truly randomly.&lt;/p&gt;
+&lt;p&gt;A key thing to note here, is that the number needs to be &lt;strong&gt;truly randomly generated&lt;/strong&gt;, otherwise someone else will likely &amp;ldquo;randomly&amp;rdquo; generate the same key. That job is mainly delegated to industry standard cryptography libraries. It is quite discouraged to implement your own random generator.&lt;/p&gt;
+&lt;p&gt;Ok great, now we know what the Private Key is (a randomly generated large number) what is the Public Key? And how is it related to the Private Key?&lt;/p&gt;
+&lt;h3&gt;What is a Public Key?&lt;/h3&gt;
+&lt;p&gt;Well, the Public Key is generated &lt;em&gt;from&lt;/em&gt; the Private Key. It is &lt;em&gt;different&lt;/em&gt; from the &lt;em&gt;public address&lt;/em&gt;, the public address is generated from the Public Key. We’ll briefly touch on this step as well in a later section.&lt;/p&gt;
+&lt;p&gt;However since the Public Key is (as you may have guessed) public, how do we make sure that the Private Key cannot be calculated or generated from the Public Key?&lt;/p&gt;
+&lt;p&gt;There are 2 properties needed in order to achieve this:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Generating a Public Key from a Private Key is only one way. In other words, it is impossible to compute it the other way around.&lt;/li&gt;
+&lt;li&gt;Generating the Public Key from the Private Key always results in the same Public Key. There can only be one Public Key that is associated with the Private Key.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4&gt;Introducing Elliptic Curves&lt;/h4&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;em&gt;Note: I will be using TTM (Trust The Math) quite a bit in the following section.&lt;/em&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Elliptic Curves are mathematically defined as equations in the following format: y&lt;sup&gt;2&lt;/sup&gt;  = x&lt;sup&gt;3&lt;/sup&gt; + ax + b. When plotted on a normal graph plane it looks something like this:&lt;/p&gt;
+&lt;!-- ![Basic Elliptic Curve](./priv-pub-encryption-eth/elliptic-curve-1.png) --&gt;
+
+&lt;p align="middle"&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-1.png" width="500" /&gt;  
+&lt;/p&gt;
+
+&lt;p&gt;What&amp;rsquo;s special about this equation or curve? It holds some pretty interesting properties:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;The curve is symmetrical on the x-axis&lt;/strong&gt;.
+   Any point on the curve, has a corresponding point on the curve when reflecting on the x-axis.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Adding 2 points on the curve results in a 3rd point on curve&lt;/strong&gt;.
+   What does it mean to add 2 points on the curve? To add 2 points, we draw a line between them, extend it. That line will eventually intersect again on the curve at &lt;strong&gt;exactly&lt;/strong&gt; 1 more point. We then reflect that 3rd point on the x-axis to get the final result of the addition.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4&gt;Let’s break that down&lt;/h4&gt;
+&lt;p&gt;Elliptic curve addition in plain English can be described with the following rules:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;For any 2 non-vertical points&lt;ul&gt;
+&lt;li&gt;Adding 2 distinct points: Draw a line between the 2 points. They will intersect at exactly one more point on the curve. Take that 3rd point and reflect it horizontally on the x-axis, which will still be on the curve. That point is the final result of the addition.&lt;/li&gt;
+&lt;li&gt;Adding a point to itself: In this case, we draw a tangent on the curve at exactly that point and extend the tangent line. If the tangent is not vertical it will eventually interest with the curve at exactly one more point. We reflect that point horizontally on the x-axis, that is the result of the addition. If the tangent line is vertical, then that is a special case discussed in the point below.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;For 2 vertical points (including a vertical tangent), this is a special case. Since the vertical line will never intersect a third time with the curve, an &amp;ldquo;imaginary&amp;rdquo; point is defined, called the &amp;ldquo;point of infinity&amp;rdquo;. You can think of this point as similar to 0 when doing normal addition. For example: Just like how &lt;code&gt;5 + 0 = 5&lt;/code&gt; in normal arithmetic, in elliptic curve addition if we set &lt;code&gt;I = point_of_infinity&lt;/code&gt; then &lt;code&gt;P1 + I = P1&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;We won’t dive into formally proving these properties, as it’s out of scope for this post, and honestly I didn’t dive that deep, so we’ll just TTM. However, since it easier to grasp these properties geometrically, I will leave you with these simple visualizations:&lt;/p&gt;
+&lt;p align="middle"&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-step-0.png" width="290" /&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-step-1.png" width="290" /&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-step-2.png" width="290" /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;You can also check out this really cool &lt;a href="https://www.desmos.com/calculator/ialhd71we3"&gt;interactive demo&lt;/a&gt; of the curve where you can move the 2 points around and see how they intersect.&lt;/p&gt;
+&lt;h4&gt;Back to Public Keys&lt;/h4&gt;
+&lt;p&gt;What does the elliptic curve and the properties mentioned have to do with generating Public Keys? Well, as it turns out, in Ethereum elliptic curves are used to generate Public Keys from Private Keys.&lt;/p&gt;
+&lt;p&gt;Though the specific elliptic curve used is called &lt;code&gt;secp256k1&lt;/code&gt; and looks like this y&lt;sup&gt;2&lt;/sup&gt; = x&lt;sup&gt;3&lt;/sup&gt; + 7 (mod p).&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Fun fact: It’s the same curve used in Bitcoin as well.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;You may have noticed something slightly different about this equation compared to the one we discussed above, namely the &lt;code&gt;(mod p)&lt;/code&gt;. This is because in the previous equation it is plotted over the plane of all real numbers, i.e. it includes fractions. This is called an &amp;ldquo;infinite field&amp;rdquo;, we used them since it’s easier to introduce and visualize elliptic curves along with their properties.&lt;/p&gt;
+&lt;p&gt;In &lt;code&gt;secp256k1&lt;/code&gt; the plane in which is it plotted on is limited to integers that fit into &lt;code&gt;(mod p)&lt;/code&gt;. Where &lt;code&gt;p&lt;/code&gt; is a really large prime number. This is called a &amp;ldquo;finite field&amp;rdquo;. When plotting on this field, since we no longer have fractions as points, it’s no longer a smooth curve. So it becomes slightly harder to visualize however it holds all the same properties mentioned earlier. &lt;/p&gt;
+&lt;p&gt;Here is an example of y&lt;sup&gt;2&lt;/sup&gt; = x&lt;sup&gt;3&lt;/sup&gt; + 7 (mod p) plotted where &lt;code&gt;p&lt;/code&gt; is 17, a small prime number to aid with visualization:&lt;/p&gt;
+&lt;p align="middle"&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-finite-field.png" width="500" /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Here we notice a few things:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;It is not a smooth curve, but rather scattered points&lt;/li&gt;
+&lt;li&gt;It is still horizontally symmetrical, however not on the x-axis since in finite fields there can&amp;rsquo;t be any negatives (mod always returns a positive)&lt;/li&gt;
+&lt;li&gt;In this example, point &lt;code&gt;(3, 0)&lt;/code&gt; appears to not have a symmetrical point when reflecting horizontally, however that is not the case. What you’ll notice about the other points and their respective reflections, is that if you add up their &lt;code&gt;y&lt;/code&gt; coordinates they sum up to &lt;code&gt;p&lt;/code&gt; (or 17), this is because they are inverses . So for point &lt;code&gt;(6, 6)&lt;/code&gt; and &lt;code&gt;(6, 11)&lt;/code&gt;, &lt;code&gt;6 + 11 = 17&lt;/code&gt;, since &lt;code&gt;6 mod 17 = 6&lt;/code&gt; and &lt;code&gt;-6 mod 17 = 11&lt;/code&gt;. In the case of &lt;code&gt;(3, 0)&lt;/code&gt; the inverse is in fact &lt;strong&gt;itself&lt;/strong&gt;. &lt;code&gt;0 mod 17 = 0&lt;/code&gt; and &lt;code&gt;-0 mod 17 = 0&lt;/code&gt; and since &lt;code&gt;17&lt;/code&gt; is outside the finite field range, so a point with &lt;code&gt;17&lt;/code&gt; as a coordinate would be invalid. A similar point exists in infinite field curves as well, its equivalent to the single point at the edge of the curve:&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p align="middle"&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-single-point.png" width="290" /&gt;
+&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;It holds the same addition properties described in the previous section. If you connect 2 points and extend the line but reach the edge without intersecting with a third point, the line teleports to the other side of the graph and continues until it reaches the third point:&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p align="middle"&gt;
+  &lt;img src="./priv-pub-encryption-eth/elliptic-curve-mod.png" width="500" /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Why &lt;code&gt;(mod p)&lt;/code&gt; though? To put it simply, the reason for &lt;code&gt;mod&lt;/code&gt; is to avoid the complications with dealing with decimals when it&amp;rsquo;s over the full real numbers plane. The reason for &lt;code&gt;p&lt;/code&gt;, a very large prime number, is to have a very large plane to work with making it significantly harder to predict and compute the associated keys together. This is probably an oversimplification, but just TTM.&lt;/p&gt;
+&lt;p&gt;After laying down all that math groundwork, how do we actually generate the Public Keys?&lt;/p&gt;
+&lt;p&gt;There is a specific point on the &lt;code&gt;secp256k1&lt;/code&gt; curve, called the &lt;strong&gt;generator point&lt;/strong&gt; &lt;code&gt;G&lt;/code&gt;. We don’t need to worry about where it is exactly, or how it was chosen. Just know that it is some &lt;code&gt;(x, y)&lt;/code&gt; coordinates on the curve and TTM. To generate a Public Key from a given Private Key, we need to perform 2 steps:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Multiply the point &lt;code&gt;G&lt;/code&gt; with the Private Key&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;But wait! What does that mean? Previously, we explained how to do elliptic curve addition, but not exactly multiplication. However, you can technically define multiplication in terms of addition. For example, &lt;code&gt;3x&lt;/code&gt; can be rewritten to &lt;code&gt;x + x + x&lt;/code&gt;. Therefore we can use the addition techniques above to calculate multiplication as well. &lt;/p&gt;
+&lt;p&gt;Now that we know how to multiply, and we know that the Private Key is a really large random number, let’s call it &lt;code&gt;pr&lt;/code&gt;. More formally we can define it as: &lt;code&gt;pr * G&lt;/code&gt; or &lt;code&gt;prG&lt;/code&gt;. In other words, we add &lt;code&gt;G&lt;/code&gt; to itself &lt;code&gt;pr&lt;/code&gt; amount of times. &lt;/p&gt;
+&lt;p&gt;For example, if we assume the Private Key &lt;code&gt;pr = 5&lt;/code&gt;, then the multiplication of &lt;code&gt;G&lt;/code&gt; would be &lt;code&gt;5G&lt;/code&gt; or &lt;code&gt;G + G + G + G + G&lt;/code&gt;. Following the rules of elliptic curve addition we described above, we will eventually land on a point that is also on the elliptic curve after all the additions.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Serialize the result&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;After multiplying, we now have the &lt;code&gt;(x, y)&lt;/code&gt; coordinate result on the elliptic curve. The &lt;code&gt;x&lt;/code&gt; and the &lt;code&gt;y&lt;/code&gt; coordinates are both really large numbers. In Ethereum, to serialize the result, there is a standard that is followed. The standard, in simple terms, is essentially taking each coordinates represented as a 32 byte hexadecimal (64 digits) each, concatenating them together then slapping a &lt;code&gt;04&lt;/code&gt; hex at the beginning.&lt;/p&gt;
+&lt;p&gt;In more formal terms: &lt;code&gt;04 + x-coordinate + y-coordinate&lt;/code&gt;. The &lt;code&gt;04&lt;/code&gt; hex at the beginning is just the standard that it used to represent the Public Key, sometimes written as &lt;code&gt;0x04&lt;/code&gt; to indicate it is a hexadecimal.&lt;/p&gt;
+&lt;p&gt;Here is a random (definitely not accurate) example for illustration purposes:&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class="codehilite"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;x = fe3afdc4f03124d2c01b31c595a7211e7363c0720b9a99c33d7c589d7990278c
+y = 83019f4918c6bb43c97b055a7a1142436b54504368ac0438ffb6fe2015cffc8d
+
+0x04fe3afdc4f03124d2c01b31c595a7211e7363c0720b9a99c33d7c589d7990278c83019f4918c6bb43c97b055a7a1142436b54504368ac0438ffb6fe2015cffc8d
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Now we have the Public Key!&lt;/p&gt;
+&lt;h4&gt;Why the hassle?&lt;/h4&gt;
+&lt;p&gt;Remember, at the beginning of this section we had a specific requirement. We needed an &lt;strong&gt;easy&lt;/strong&gt; way to compute/generate the Public Key from the Private Key, while being &lt;strong&gt;impossible&lt;/strong&gt; to go the other way around Public Key to Private Key.&lt;/p&gt;
+&lt;p&gt;As we’ve seen, generating the Public Key given the Private Key is done by continuously adding a point on the &lt;code&gt;secp256k1&lt;/code&gt; elliptic curve a bunch of times, this can be done easily. There are, in fact, some cool optimizations that can be done to speed up the addition using some math tricks (TTM).&lt;/p&gt;
+&lt;p&gt;Try going the other way around though. You have a point &lt;code&gt;(x, y)&lt;/code&gt; on the curve, there is no way for you or anyone to know how many additions were done to reach this point. i.e. it’s impossible to determine that number, which is the Private Key, especially in a &lt;em&gt;very&lt;/em&gt; large plane field.&lt;/p&gt;
+&lt;h3&gt;What is a Public Address?&lt;/h3&gt;
+&lt;p&gt;The Public Address is the address that you actually see in wallets and use to send ETH to. They are 20 bytes represented in hexadecimal. For example: &lt;/p&gt;
+&lt;div class="codehilite"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;0xff578d7fee384a0a577cfab22c97d7327e5fe935
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;The Public Address is generated by hashing the Public Key using the &lt;code&gt;Keccak256&lt;/code&gt; hash function and taking the last 20 bytes of the result, pretty straightforward. That would be the address of EOAs we described at the beginning of this post. Anyone can send ETH to the Public Address, however only the person who has the Private Key will be able to interact with it.&lt;/p&gt;
+&lt;p&gt;The reasoning for using the Public Address vs the Public Key directly, is because it’s shorter and hence less prone to typos. It was also a design decision made to lay the ground work for the future of the protocol, allowing for layers of abstractions to be built on top of public addresses.&lt;/p&gt;
+&lt;h3&gt;Closing Thoughts&lt;/h3&gt;
+&lt;p&gt;We’ve taken a closer look at what Private-Public keys are, how they are related to each other:&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Private Key -&amp;gt; Public Key -&amp;gt; Public Address&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;We also peaked under the hood and saw the different properties that make this type of encryption secure. However a lot of the heavy lifting of implementation details is usually abstracted away for the developers by using well tested production ready packages/libraries.&lt;/p&gt;
+&lt;p&gt;A final idea I want to leave you with relates to Wallets. In Ethereum, wallets don’t actually hold or store any ETH. It stores the Private Key(s) on a basic level, because of this, you are able to interact with the ETH that is related to the Public Address. This allows you to &amp;ldquo;take your keys&amp;rdquo; to a different wallet and recover your funds.&lt;/p&gt;
+&lt;p&gt;In the real world, wallets are a lot more sophisticated. They can hold/generate multiple (uncapped) amount of keys/accounts from a single master Private Key and a lot more cool functionality. It&amp;rsquo;s all out of scope for this post, but might be an interesting topic for a future post.&lt;/p&gt;</content></entry><entry><title>Hello World!</title><link href="https://ymusleh.com/hello-world.html" rel="alternate"></link><published>2024-02-08T12:00:00+00:00</published><updated>2024-02-08T12:00:00+00:00</updated><author><name>Yusuf Musleh</name></author><id>tag:ymusleh.com,2024-02-08:/hello-world.html</id><summary type="html">Welcome to my new Website</summary><content type="html">&lt;h3&gt;Welcome to my new Website&lt;/h3&gt;
 &lt;p&gt;Hey there! I recently decided to throw up a new website, the old one has been up for quite a while and it was time for a change.&lt;/p&gt;
 &lt;p&gt;The actual real motivation behind this though was because I wanted a place to share more about interesting projects I am working on. As any software engineer would do before starting a new big project&amp;hellip; prepare to start the new project by doing a smaller project that &lt;em&gt;&amp;ldquo;needs&amp;rdquo;&lt;/em&gt; to be done first, in clear &lt;a href="https://xkcd.com/1739/"&gt;yak shaving&lt;/a&gt; fashion. So here we are.&lt;/p&gt;
 &lt;p&gt;I&amp;rsquo;m hoping to publish more updates on my learnings and progress with small devlogs that document the journey. There isn&amp;rsquo;t really a general cadence for how often I will write, but whenever I figure out something I was stuck on or discover something interesting, I&amp;rsquo;ll share it here.&lt;/p&gt;
