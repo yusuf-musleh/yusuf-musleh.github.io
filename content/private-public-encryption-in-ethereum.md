@@ -9,7 +9,7 @@ Tags: ethereum, encryption
 
 There are 2 types of accounts in Ethereum; *externally owned accounts (EOA)* and *smart contract accounts*. To give you a quick 1-liner for each, EOAs are accounts that can perform basic transactions, whereas smart contract accounts contain code that can be executed and can hold storage.
 
-They are similar in which they both can hold a balance of ETH, but are different in which only EAOs can initiate transactions on the network, whereas smart contract accounts *cannot* initiate transactions themselves. They need to be called from an EAO or another smart contract that was in turn executed by an EAO.
+They are similar in which they both can hold a balance of ETH, but are different in which only EOAs can initiate transactions on the network, whereas smart contract accounts *cannot* initiate transactions themselves. They need to be called from an EOA or another smart contract that was in turn executed by an EOA.
 
 Since EOAs initiate all the action on the network, they need to be secured. In other words, *only* the person who is allowed to perform actions with that EOA should be able to do so. We’ll explore how this is achieved through **Private-Public Key Encryption**.
 
