@@ -15,7 +15,7 @@ docker run --rm -it -v .:/app/ personal-website
 1. Once you are happy with the new content, generate the static files
 
 	```sh
-	blab -v build -o docs
+	blag -v build -o docs
 	```
 
 	That should generate the new static files in the `/docs` directory
