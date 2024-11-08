@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="author" content="Yusuf Musleh">
+    <meta name="description" content="Supporting multiple clients and optimizing messaging protocol.">
+    <link rel="alternate" href="/atom.xml" type="application/atom+xml">
+    <link rel="stylesheet" href="/style.css" type="text/css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Yusuf Musleh | mmar - Devlog 3</title>
+
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_e9dXJZIsCVdHzVkBKZGXklKjLGnmtRLXc4xZEaXUJg2',{api_host:'https://us.i.posthog.com', person_profiles: 'identified_only'
+        })
+</script>
+
+</head>
+
+  <body>
+    <header>
+      <h1><a href="/">Yusuf Musleh</a></h1>
+      <nav>
+        <h2>thoughts and devlogs</h2>
+        <ul>
+          <li><h2><a href="/writings.html">Writings</a></h2></li>
+          <li><h2><a href="/archive.html">Archive</a></h2></li>
+          <li><h2><a href="/tags/">Tags</a></h2></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+    
+
+  
+  <h2>mmar - Devlog 3</h2>
+  
+
+  <aside>
+    <p>published on 2024-11-08
+
+    
+    · tagged with
+      
+        <a href="/tags/devlog.html">#devlog</a>, 
+        <a href="/tags/golang.html">#golang</a> and 
+        <a href="/tags/mmar.html">#mmar</a>
+    
+    </p>
+  </aside>
+
+  <p><em>This post is part of a devlog series documenting my progress building <code>mmar</code>, a cross-platform tunnel that exposes your localhost to the world. If you&rsquo;d like to follow along from the beginning, you can find all the devlogs <a href="/tags/mmar.html">here</a>.</em></p>
+<h2>Progress Update</h2>
+<p>In this devlog we’ll go over the implementation of a core functionality of <code>mmar</code>, without it, it would quite useless, and that is supporting multiple clients. In addition to optimizing the messaging protocol, and some general smaller additions and improvements to both the functionality and the codebase.</p>
+<p>We’ll go over the major changes as there’s lots of interesting technical details, so let’s get started.</p>
+<h2>Supporting Multiple Clients</h2>
+<p>As I mentioned in the <a href="/mmar-devlog-002.html">previous devlog</a>, my general approach is to first get things working for a simple cases, and then extend/expand it to support more complex cases, allowing me to not overcomplicate things from the get go and move faster.</p>
+<p>Leaning on that approach, until now, <code>mmar</code> only supported <em>1</em> client. In other words, it was only possible to create 1 tunnel, not very useful in the real world :D So naturally after making sure the functionality was somewhat stable for a single client, handling all the various cases (as we saw in the <a href="/mmar-devlog-001.html">previous devlog</a>), it was time to extend it to support multiple clients.</p>
+<h3>Unique IDs + URLs</h3>
+<p>Now that we need to support multiple clients, we need a way for the server to determine where to route the requests that are coming in from the public URL to its corresponding client tunnel. A pretty common (and clean) way to do this is by generating unique IDs and using that as subdomains for each client (tunnel) acting as the public URL that users can access the tunnel through. That’s exactly what I did. </p>
+<p>Let’s first talk about how these unique IDs look like. I wanted them to be simple enough to not be cumbersome for the users to share or type in and at the same time I wanted to have a big enough name space to support a large number of IDs without worrying about collisions. I went with alphanumeric strings of length 6. This means that we have 26 (lowercase letters) + 10 (digits) = 36 options for each character in the string, which means the total number of possible IDs is 36<sup>6</sup> = 2,176,782,336. That’s a pretty big number of possible IDs, the probability of a collision happening is approximately <sup>2</sup>&frasl;<sub>2,176,782,336</sub> ≈ 0.000000000918787. That is <em>extremely</em> low and definitely fits our use case. I also implemented a mechanism to handle the unlikely event of a collision, let’s see what the code looks like:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Imported constants:</span>
+
+<span class="c1">// ID_CHARSET = &quot;abcdefghijklmnopqrstuvwxyz0123456789&quot;</span>
+<span class="c1">// ID_LENGTH  = 6</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">GenerateUniqueId</span><span class="p">()</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">reservedIDs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;admin&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;stats&quot;</span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">generatedId</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s">&quot;&quot;</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">exists</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ms</span><span class="p">.</span><span class="nx">clients</span><span class="p">[</span><span class="nx">generatedId</span><span class="p">];</span><span class="w"> </span><span class="nx">exists</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nx">slices</span><span class="p">.</span><span class="nx">Contains</span><span class="p">(</span><span class="nx">reservedIDs</span><span class="p">,</span><span class="w"> </span><span class="nx">generatedId</span><span class="p">);</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">var</span><span class="w"> </span><span class="nx">randSeed</span><span class="w"> </span><span class="o">*</span><span class="nx">rand</span><span class="p">.</span><span class="nx">Rand</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">rand</span><span class="p">.</span><span class="nx">New</span><span class="p">(</span><span class="nx">rand</span><span class="p">.</span><span class="nx">NewSource</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Now</span><span class="p">().</span><span class="nx">UnixNano</span><span class="p">()))</span>
+<span class="w">        </span><span class="nx">b</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="nx">constants</span><span class="p">.</span><span class="nx">ID_LENGTH</span><span class="p">)</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">b</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">constants</span><span class="p">.</span><span class="nx">ID_CHARSET</span><span class="p">[</span><span class="nx">randSeed</span><span class="p">.</span><span class="nx">Intn</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">ID_CHARSET</span><span class="p">))]</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">generatedId</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">string</span><span class="p">(</span><span class="nx">b</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">generatedId</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The function checks if the <code>generatedID</code> is empty or already exists (collision), then starts from a random seed based on the current time, and it will repeat the process of randomly selecting from the charset to populate a slice of bytes of our defined length until a unique random ID is generated.</p>
+<p>The code includes a few things that we haven’t seen before, what are <code>MmarServer</code> and <code>ms.clients</code>? Let’s take a look at them in the following section.</p>
+<h3>Keeping Track of Clients</h3>
+<p>Now we have a way to generate IDs, and as we mentioned we wanted them to be unique and and we also mentioned that we wanted to keep track of the clients to be able to direct requests/responses to/from them. I needed a way to store some sort of state on the server. That’s where <code>MmarServer</code> comes in:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">MmarServer</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">mu</span><span class="w">           </span><span class="nx">sync</span><span class="p">.</span><span class="nx">Mutex</span>
+<span class="w">    </span><span class="nx">clients</span><span class="w">      </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="nx">ClientTunnel</span>
+<span class="w">    </span><span class="nx">tunnelsPerIP</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">][]</span><span class="kt">string</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>This new struct stores a map <code>clients</code> of keys that represent IDs to the <code>ClientTunnel</code> instance it corresponds to. The mutex <code>mu</code> is used to make sure that when we are adding a new client to the <code>clients</code> map there can’t be a race condition causing multiple tunnels that happen to have colliding IDs to override each other. </p>
+<p>I also added another map <code>tunnelsPerIP</code>, this is used to keep track of the number of clients/tunnels created from the same IP, let’s take a deeper look.</p>
+<h3>Limiting Tunnels per IP</h3>
+<p>While we want to support as many clients as possible, we also don’t want to open the door up for abuse or bad actors. So I need a mechanism to limit the number of clients that can connect and create tunnels from the same IP address. This might be an over optimization from now, but it didn’t seem like too much effort to add so why not?</p>
+<p>The <code>tunnelsPerIP</code> map keeps track of the IP address and the <code>ClientTunnel</code> IDs created for that IP address. Currently I set the limit to 5 tunnels per IP address, this might change in the future. Whenever a new <code>ClientTunnel</code> is created we check if that IP has reached its limit, if it has we reject it and close the connection, otherwise we allow it and store the new tunnel ID in the map. On the flip side when a client closes a tunnel we remove it from the list corresponding to the IP address.</p>
+<p>Now that we’ve discussed all these new components, let’s see them all in action together. I consolidated all of the necessary actions needed to be perform when creating a new <code>TunnelClient</code> to a new function:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">newClientTunnel</span><span class="p">(</span><span class="nx">conn</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">Conn</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">ClientTunnel</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Acquire lock to create new client tunnel data</span>
+<span class="w">    </span><span class="nx">ms</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nx">Lock</span><span class="p">()</span>
+
+<span class="w">    </span><span class="c1">// Generate unique ID for client</span>
+<span class="w">    </span><span class="nx">uniqueId</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ms</span><span class="p">.</span><span class="nx">GenerateUniqueId</span><span class="p">()</span>
+<span class="w">    </span><span class="nx">tunnel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">Tunnel</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">Id</span><span class="p">:</span><span class="w">   </span><span class="nx">uniqueId</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">Conn</span><span class="p">:</span><span class="w"> </span><span class="nx">conn</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Create channels to tunnel requests to and recieve responses from</span>
+<span class="w">    </span><span class="nx">incomingChannel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kd">chan</span><span class="w"> </span><span class="nx">IncomingRequest</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">outgoingChannel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kd">chan</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">TunnelMessage</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Create client tunnel</span>
+<span class="w">    </span><span class="nx">clientTunnel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ClientTunnel</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">tunnel</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">incomingChannel</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">outgoingChannel</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Check if IP reached max tunnel limit</span>
+<span class="w">    </span><span class="nx">clientIP</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">utils</span><span class="p">.</span><span class="nx">ExtractIP</span><span class="p">(</span><span class="nx">conn</span><span class="p">.</span><span class="nx">RemoteAddr</span><span class="p">().</span><span class="nx">String</span><span class="p">())</span>
+<span class="w">    </span><span class="nx">limitedIP</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ms</span><span class="p">.</span><span class="nx">TunnelLimitedIP</span><span class="p">(</span><span class="nx">clientIP</span><span class="p">)</span>
+<span class="w">    </span><span class="c1">// If so, send limit message to client and close client tunnel</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">limitedIP</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">limitMessage</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">TunnelMessage</span><span class="p">{</span><span class="nx">MsgType</span><span class="p">:</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">CLIENT_TUNNEL_LIMIT</span><span class="p">}</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">clientTunnel</span><span class="p">.</span><span class="nx">SendMessage</span><span class="p">(</span><span class="nx">limitMessage</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">clientTunnel</span><span class="p">.</span><span class="nb">close</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span>
+<span class="w">        </span><span class="c1">// Release lock once errored</span>
+<span class="w">        </span><span class="nx">ms</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nx">Unlock</span><span class="p">()</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">CLIENT_MAX_TUNNELS_REACHED</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Add client tunnel to clients</span>
+<span class="w">    </span><span class="nx">ms</span><span class="p">.</span><span class="nx">clients</span><span class="p">[</span><span class="nx">uniqueId</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">clientTunnel</span>
+
+<span class="w">    </span><span class="c1">// Associate tunnel with client IP</span>
+<span class="w">    </span><span class="nx">ms</span><span class="p">.</span><span class="nx">tunnelsPerIP</span><span class="p">[</span><span class="nx">clientIP</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">ms</span><span class="p">.</span><span class="nx">tunnelsPerIP</span><span class="p">[</span><span class="nx">clientIP</span><span class="p">],</span><span class="w"> </span><span class="nx">uniqueId</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Release lock once created</span>
+<span class="w">    </span><span class="nx">ms</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nx">Unlock</span><span class="p">()</span>
+
+<span class="w">    </span><span class="c1">// Send unique ID to client</span>
+<span class="w">    </span><span class="nx">reqMessage</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">TunnelMessage</span><span class="p">{</span><span class="nx">MsgType</span><span class="p">:</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">CLIENT_CONNECT</span><span class="p">,</span><span class="w"> </span><span class="nx">MsgData</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">uniqueId</span><span class="p">)}</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">clientTunnel</span><span class="p">.</span><span class="nx">SendMessage</span><span class="p">(</span><span class="nx">reqMessage</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">clientTunnel</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>A few other things that would be cool to mention was new messages being sent from the server to the client. For example, including the new unique ID in a <code>CLIENT_CONNECT</code> message sent to the client so they know how to access their tunnel, as well as the <code>CLIENT_TUNNEL_LIMIT</code> message sent when attempting to create a new <code>ClientTunnel</code> and that IP already reached its limit. Because of the messaging protocol we introduced in the previous devlog, adding these new messages and handling them was very straightforward, and I’m quite happy with how things turned out on that front.</p>
+<h3>Routing Requests to ClientTunnels</h3>
+<p>Once we got the different components to support multiple clients, now we need to update the logic for handling requests to determine where to forward them to. To do so we modify the <code>serverHttp</code> function to extract the subdomain from the request and use it to look up the <code>ClientTunnel</code> from the stored <code>clients</code> on the server. In the case where the client is not found we return an error response. Here is how that snippet looks like:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">ServeHTTP</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">&quot;%s - %s%s&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">Method</span><span class="p">,</span><span class="w"> </span><span class="nx">html</span><span class="p">.</span><span class="nx">EscapeString</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">URL</span><span class="p">.</span><span class="nx">Path</span><span class="p">),</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">URL</span><span class="p">.</span><span class="nx">RawQuery</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Extract subdomain to retrieve related client tunnel</span>
+<span class="w">    </span><span class="nx">subdomain</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">utils</span><span class="p">.</span><span class="nx">ExtractSubdomain</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">Host</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">clientTunnel</span><span class="p">,</span><span class="w"> </span><span class="nx">clientExists</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ms</span><span class="p">.</span><span class="nx">clients</span><span class="p">[</span><span class="nx">subdomain</span><span class="p">]</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">clientExists</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Create a response for Tunnel closed/not connected</span>
+<span class="w">        </span><span class="nx">resp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">protocol</span><span class="p">.</span><span class="nx">TunnelErrStateResp</span><span class="p">(</span><span class="nx">protocol</span><span class="p">.</span><span class="nx">CLIENT_DISCONNECT</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">w</span><span class="p">.</span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">resp</span><span class="p">.</span><span class="nx">StatusCode</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">respBody</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">io</span><span class="p">.</span><span class="nx">ReadAll</span><span class="p">(</span><span class="nx">resp</span><span class="p">.</span><span class="nx">Body</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">w</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">respBody</span><span class="p">)</span>
+<span class="w">        </span><span class="k">return</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// ... remaining code ...</span>
+</code></pre></div>
+
+<p>Now we have support for multiple clients!</p>
+<p align="middle">
+  <img src="./mmar/devlog-003/multiple-clients.png" />
+</p>
+
+<h2>Optimizing TunnelMessage Protocol</h2>
+<p>In the previous devlog we introduced a messaging protocol used for communications between the server and clients and vice versa. I mentioned that the protocol could be optimized a bit more, especially in terms of space. We saw how the prefix message type takes a significant amount of space because we used full strings to describe the message type, eg: <code>REQUEST</code> or <code>RESPONSE</code>. In addition to using <code>\n</code> as a delimiter separating all the different components of the <code>TunnelMessage</code>.  A bunch of inefficiencies across the board, so I took a stab at optimizing it.</p>
+<p>I also realized is that I didn’t add any sort of versioning to the protocol messages. Which makes it quite tricky to keep track of what messages types are defined in any given version, and could cause issues if clients attempt to send/receive messages from the server that are deprecated or vice versa. So the first step was to add a version number to messages, that way we can determine if there is a mismatch, and ask the user to upgrade the client before attempting to create a tunnel.</p>
+<p>To do that, I represent the version as the first byte in the message, that gives us 256 possible versions. That should be more than enough for now.</p>
+<p>The second step was to normalize the prefix message type and use numbers since that’s how they are presented in the code anyways. These numbers can be represented as a single byte (<code>uint8</code>) as well, giving us 256 different types of message, way more than we need, but you never know.</p>
+<p>Just with these 2 changes alone, we went from what would previously have been 8 bytes for just the prefix <code>RESPONSE</code>, now we have a constant size of 2 bytes for both the version and prefix message type. Not bad.</p>
+<p>Next, we have the length of the message data, this gives us information about how much data is being sent so we know how much to read. Since the data is quite dynamic, I opted to not restrict it to any amount of bytes. So we have a 1 or more bytes representing this number. Then finally I left the <code>\n</code> as a delimiter between the message data length and the actual message data so can tell when the bytes representing the length end and the actual message data begins. In the end we have the bytes representing the actual message data.</p>
+<p>To summarize this is how the <code>TunnelMessage</code> looks like when it’s serialized:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">+---------+------------+---------------------+------------+--------------------+</span>
+<span class="c">| Version | Msg Type   | Length of Msg Data  | Delimiter  | Message Data       |</span>
+<span class="c">| (1 byte)| (1 byte)   | (1 or more bytes)   | (1 byte)   | (Variable Length)  |</span>
+<span class="nb">+---------+------------+---------------------+------------+--------------------+</span>
+</code></pre></div>
+
+<p>A great side effect of this was how much the code got cleaned up after normalizing the message types. Previously, we had a <code>switch</code> statement with cases when serializing/deserializing the <code>TunnelMessage</code> to determine it’s type, and every time we added a new type we needed to add another case statement. Now, since we are using the <code>uint8</code> (1 byte) directly when dealing with the message types, we can do cool things like this to determine what the message type is and if it valid:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nx">REQUEST</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">uint8</span><span class="p">(</span><span class="kc">iota</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">RESPONSE</span>
+<span class="w">    </span><span class="nx">CLIENT_CONNECT</span>
+<span class="w">    </span><span class="nx">CLIENT_DISCONNECT</span>
+<span class="w">    </span><span class="nx">CLIENT_TUNNEL_LIMIT</span>
+<span class="w">    </span><span class="nx">LOCALHOST_NOT_RUNNING</span>
+<span class="p">)</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">isValidTunnelMessageType</span><span class="p">(</span><span class="nx">mt</span><span class="w"> </span><span class="kt">uint8</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="kt">uint8</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Iterate through all the message type, from first to last, checking</span>
+<span class="w">    </span><span class="c1">// if the provided message type matches one of them</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">msgType</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">REQUEST</span><span class="p">;</span><span class="w"> </span><span class="nx">msgType</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="nx">LOCALHOST_NOT_RUNNING</span><span class="p">;</span><span class="w"> </span><span class="nx">msgType</span><span class="o">++</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nx">mt</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">msgType</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="nx">msgType</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nx">INVALID_MESSAGE_TYPE</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Now, anytime we add a new message type we just make sure we are looping from the lowest number to the highest number in the defined message types. Here is how the new and improved serializers/deserializers look like:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">tm</span><span class="w"> </span><span class="o">*</span><span class="nx">TunnelMessage</span><span class="p">)</span><span class="w"> </span><span class="nx">serializeMessage</span><span class="p">()</span><span class="w"> </span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">serializedMsg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[][]</span><span class="kt">byte</span><span class="p">{}</span>
+
+<span class="w">    </span><span class="c1">// Determine and validate message type to add prefix</span>
+<span class="w">    </span><span class="nx">msgType</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">isValidTunnelMessageType</span><span class="p">(</span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgType</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// TODO: Gracefully handle non-protocol message received</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Invalid TunnelMessage type: %v:&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgType</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Add version of TunnelMessage protocol and TunnelMessage type</span>
+<span class="w">    </span><span class="nx">serializedMsg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span>
+<span class="w">        </span><span class="nx">serializedMsg</span><span class="p">,</span>
+<span class="w">        </span><span class="p">[]</span><span class="kt">byte</span><span class="p">{</span><span class="nb">byte</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">TUNNEL_MESSAGE_PROTOCOL_VERSION</span><span class="p">),</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="nx">msgType</span><span class="p">)},</span>
+<span class="w">    </span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Add message data bytes length</span>
+<span class="w">    </span><span class="nx">serializedMsg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">serializedMsg</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">strconv</span><span class="p">.</span><span class="nx">Itoa</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgData</span><span class="p">))))</span>
+
+<span class="w">    </span><span class="c1">// Add delimiter to know where the data content starts in the message</span>
+<span class="w">    </span><span class="nx">serializedMsg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">serializedMsg</span><span class="p">,</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="p">{</span><span class="nb">byte</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">TUNNEL_MESSAGE_DATA_DELIMITER</span><span class="p">)})</span>
+
+<span class="w">    </span><span class="c1">// Add the message data</span>
+<span class="w">    </span><span class="nx">serializedMsg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">serializedMsg</span><span class="p">,</span><span class="w"> </span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgData</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Combine all the data with no separators</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">bytes</span><span class="p">.</span><span class="nx">Join</span><span class="p">(</span><span class="nx">serializedMsg</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span><span class="p">),</span><span class="w"> </span><span class="kc">nil</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">tm</span><span class="w"> </span><span class="o">*</span><span class="nx">TunnelMessage</span><span class="p">)</span><span class="w"> </span><span class="nx">deserializeMessage</span><span class="p">(</span><span class="nx">reader</span><span class="w"> </span><span class="o">*</span><span class="nx">bufio</span><span class="p">.</span><span class="nx">Reader</span><span class="p">)</span><span class="w"> </span><span class="kt">error</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">msgProtocolVersion</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">reader</span><span class="p">.</span><span class="nx">ReadByte</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">err</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Check if the message protocol version is correct</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nb">uint8</span><span class="p">(</span><span class="nx">msgProtocolVersion</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="nx">constants</span><span class="p">.</span><span class="nx">TUNNEL_MESSAGE_PROTOCOL_VERSION</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">INVALID_MESSAGE_PROTOCOL_VERSION</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">msgPrefix</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">reader</span><span class="p">.</span><span class="nx">ReadByte</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">err</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">msgType</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">isValidTunnelMessageType</span><span class="p">(</span><span class="nx">msgPrefix</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// TODO: Gracefully handle non-protocol message received</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Invalid TunnelMessage prefix: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">msgPrefix</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">msgLengthStr</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">reader</span><span class="p">.</span><span class="nx">ReadString</span><span class="p">(</span><span class="sc">&#39;\n&#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">err</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Determine the length of the data by stripping out the &#39;\n&#39; and convert to int</span>
+<span class="w">    </span><span class="nx">msgLength</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">strconv</span><span class="p">.</span><span class="nx">Atoi</span><span class="p">(</span><span class="nx">msgLengthStr</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="nx">msgLengthStr</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// TODO: Gracefully handle invalid message data length</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Could not parse message length: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">msgLengthStr</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">msgData</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">tm</span><span class="p">.</span><span class="nx">readMessageData</span><span class="p">(</span><span class="nx">msgLength</span><span class="p">,</span><span class="w"> </span><span class="nx">reader</span><span class="p">)</span>
+
+<span class="w">    </span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgType</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">msgType</span>
+<span class="w">    </span><span class="nx">tm</span><span class="p">.</span><span class="nx">MsgData</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">msgData</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>So much nicer!</p>
+<h2>Thanks!</h2>
+<p>If you made it to the end, thanks for reading! Hopefully you’re enjoying following along this journey. Until next time!</p>
+
+
+    </main>
+
+    <footer>
+      <p>
+      Find me on
+        <a href="https://github.com/yusuf-musleh">Github</a> -
+        <a href="https://www.linkedin.com/in/yusufmusleh/">Linkedin</a> - 
+        <a href="https://twitter.com/YusufMusleh">X</a>
+      <br>
+      This website was built with <a href="https://github.com/venthur/blag">blag</a>.
+      </p>
+    </footer>
+  </body>
+
+</html>
