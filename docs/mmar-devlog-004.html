@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="author" content="Yusuf Musleh">
+    <meta name="description" content="Adding server stats and user friendly logs.">
+    <link rel="alternate" href="/atom.xml" type="application/atom+xml">
+    <link rel="stylesheet" href="/style.css" type="text/css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Yusuf Musleh | mmar - Devlog 4</title>
+
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_e9dXJZIsCVdHzVkBKZGXklKjLGnmtRLXc4xZEaXUJg2',{api_host:'https://us.i.posthog.com', person_profiles: 'identified_only'
+        })
+</script>
+
+</head>
+
+  <body>
+    <header>
+      <h1><a href="/">Yusuf Musleh</a></h1>
+      <nav>
+        <h2>thoughts and devlogs</h2>
+        <ul>
+          <li><h2><a href="/writings.html">Writings</a></h2></li>
+          <li><h2><a href="/archive.html">Archive</a></h2></li>
+          <li><h2><a href="/tags/">Tags</a></h2></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+    
+
+  
+  <h2>mmar - Devlog 4</h2>
+  
+
+  <aside>
+    <p>published on 2024-11-23
+
+    
+    · tagged with
+      
+        <a href="/tags/devlog.html">#devlog</a>, 
+        <a href="/tags/golang.html">#golang</a> and 
+        <a href="/tags/mmar.html">#mmar</a>
+    
+    </p>
+  </aside>
+
+  <p><em>This post is part of a devlog series documenting my progress building <code>mmar</code>, a cross-platform tunnel that exposes your localhost to the world. If you&rsquo;d like to follow along from the beginning, you can find all the devlogs <a href="/tags/mmar.html">here</a>.</em></p>
+<h2>Progress Update</h2>
+<p>In this devlog we’ll go over some new quality of life additions for users of mmar, both for normal users running mmar clients or users rolling out their own mmar server. The two main changes introduced were:</p>
+<ol>
+<li>A way to know the number of tunnels that are currently open at any given time.</li>
+<li>Clear information and instructions upon running a mmar client.</li>
+</ol>
+<p>Let’s dive in to take a closer look at these changes.</p>
+<h2>Server Stats</h2>
+<p>While building mmar, I figured I wanted a way to see some information or stats related to the current state of the server. The bare minimum was to at least know how many tunnels are currently open, along with the their IDs (subdomains). At the same time, I didn’t want to overcomplicate things, building a webpage and rolling complex auth, so I opted for getting these stats as a JSON and implementing <code>Basic Authentication</code>.</p>
+<p>You may have noticed in a previously shared snippet of code, I reserve the <code>stats</code> subdomain as a special subdomain, to avoid the unlikely event of it being randomly generated for a tunnel. That subdomain is how the operator of the mmar server can access the current state of the server. As the operator you’re free to access this in the browser, or query it as an API endpoint and build out your own webpage and UI to showcase it. </p>
+<h3>Gathering Stats</h3>
+<p>Since we are returning a JSON, and we already store client information in a <code>map</code>, our job is already somewhat done for us. If you recall, we stored the client information on the server as a <code>map[string]ClientTunnel</code> where the key string represents the ID of the client tunnel. Getting the number of tunnels is as easy as <code>len(clients)</code>. In addition to the number of tunnels, I also wanted information about them, i.e. their IDs and when the tunnel was created. To do that, we need to add a new field in the <code>Tunnel</code> struct that contains a timestamp of when it was created, additionally it would be nicer to get a list of clients containing this information rather than an object.</p>
+<p>Sure enough, this change was quite straightforward. Here is the updated <code>Tunnel</code> struct with the new field:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">Tunnel</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Id</span><span class="w">        </span><span class="kt">string</span>
+<span class="w">    </span><span class="nx">Conn</span><span class="w">      </span><span class="nx">net</span><span class="p">.</span><span class="nx">Conn</span>
+<span class="w">    </span><span class="nx">CreatedOn</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Time</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>We introduced a new method that is called whenever the <code>stats</code> subdomain is accessed:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">handleServerStats</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">stats</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">any</span><span class="p">{}</span>
+
+<span class="w">    </span><span class="c1">// Add total connected clients count</span>
+<span class="w">    </span><span class="nx">stats</span><span class="p">[</span><span class="s">&quot;connectedClientsCount&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="nx">ms</span><span class="p">.</span><span class="nx">clients</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Add list of connected clients, including only relevant fields</span>
+<span class="w">    </span><span class="nx">clientStats</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{}</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">val</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">ms</span><span class="p">.</span><span class="nx">clients</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">client</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span>
+<span class="w">            </span><span class="s">&quot;id&quot;</span><span class="p">:</span><span class="w">        </span><span class="nx">val</span><span class="p">.</span><span class="nx">Id</span><span class="p">,</span>
+<span class="w">            </span><span class="s">&quot;createdOn&quot;</span><span class="p">:</span><span class="w"> </span><span class="nx">val</span><span class="p">.</span><span class="nx">CreatedOn</span><span class="p">.</span><span class="nx">Format</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">RFC3339</span><span class="p">),</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">clientStats</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">clientStats</span><span class="p">,</span><span class="w"> </span><span class="nx">client</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">stats</span><span class="p">[</span><span class="s">&quot;connectedClients&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">clientStats</span>
+
+<span class="w">    </span><span class="c1">// Marshal the result</span>
+<span class="w">    </span><span class="nx">marshalledStats</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">stats</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Failed to marshal server stats: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">StatusOK</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">marshalledStats</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">ServeHTTP</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Extract subdomain to retrieve related client tunnel</span>
+<span class="w">    </span><span class="nx">subdomain</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">utils</span><span class="p">.</span><span class="nx">ExtractSubdomain</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">Host</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Handle stats subdomain</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">subdomain</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s">&quot;stats&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">ms</span><span class="p">.</span><span class="nx">handleServerStats</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="p">)</span>
+<span class="w">        </span><span class="k">return</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// ... remaining code ...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>And here’s an example of the stats we see:</p>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;connectedClients&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;createdOn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-11-20T12:49:00Z&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pxsg4o&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;createdOn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-11-20T12:45:53Z&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;t6vx56&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;connectedClientsCount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3>Basic Authentication</h3>
+<p>Now that we have this helpful data, we don’t necessarily want it to be public and at the same time, I didn’t want to roll out full authentication, which would require storing information in a database, again the goal is keep it extremely simple with no dependancies.</p>
+<p>Naturally what seemed to fit the bill was to put it behind <code>Basic Authentication</code>. What’s nice about <code>Basic Authentication</code> is that if you access the page from the browser, you get the browser’s native popup asking the user to enter their credentials. Alternatively the user also has the ability to make a request to the <code>stats</code> url providing the username and password in the request, for example <code>https://&lt;username&gt;:&lt;password&gt;@stats.mmar.dev/</code>.</p>
+<p>To add additional layers of security, rather than directly comparing the username and password with the ones expected (i.e. stored in server’s environment variables), I store the <code>sha256</code> hashes for each rather than plain text. Furthermore, I make use of the built in <code>subtle.ConstantTimeCompare</code> rather than a normal <code>==</code>, to avoid potential time-based attacks. All of this might be overkill, but it’s good practice in general and implementing it was not that complex.</p>
+<p>Let’s first look at how we validate the credentials provided, assuming we have the hash of the username and password stored as environment variables, if they are not, I have default credentials defined as constants, both set to <code>admin</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Included in constants/main.go:</span>
+<span class="c1">// SERVER_STATS_DEFAULT_USERNAME = &quot;admin&quot;</span>
+<span class="c1">// SERVER_STATS_DEFAULT_PASSWORD = &quot;admin&quot;</span>
+
+<span class="c1">// Check if provided Basic Auth credentials are valid</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">ValidCredentials</span><span class="p">(</span><span class="nx">username</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">password</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Compute Hash for provided username and password</span>
+<span class="w">    </span><span class="nx">usernameHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sha256</span><span class="p">.</span><span class="nx">Sum256</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">username</span><span class="p">))</span>
+<span class="w">    </span><span class="nx">passwordHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sha256</span><span class="p">.</span><span class="nx">Sum256</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">password</span><span class="p">))</span>
+
+<span class="w">    </span><span class="c1">// Receive expected Hash for username</span>
+<span class="w">    </span><span class="nx">envUsernameHash</span><span class="p">,</span><span class="w"> </span><span class="nx">foundUsernameHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">LookupEnv</span><span class="p">(</span><span class="s">&quot;USERNAME_HASH&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">usernameDecodedHash</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">foundUsernameHash</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">usernameDecodedHash</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">decodeHash</span><span class="p">(</span><span class="nx">envUsernameHash</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Fallback to default if not set</span>
+<span class="w">        </span><span class="nx">defaultUsernameHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sha256</span><span class="p">.</span><span class="nx">Sum256</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">SERVER_STATS_DEFAULT_USERNAME</span><span class="p">))</span>
+<span class="w">        </span><span class="nx">usernameDecodedHash</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">defaultUsernameHash</span><span class="p">[:]</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Receive expected Hash for password</span>
+<span class="w">    </span><span class="nx">envPasswordHash</span><span class="p">,</span><span class="w"> </span><span class="nx">foundPasswordHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">LookupEnv</span><span class="p">(</span><span class="s">&quot;PASSWORD_HASH&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">passwordDecodedHash</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">foundPasswordHash</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">passwordDecodedHash</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">decodeHash</span><span class="p">(</span><span class="nx">envPasswordHash</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Fallback to default if not set</span>
+<span class="w">        </span><span class="nx">defaultPasswordHash</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sha256</span><span class="p">.</span><span class="nx">Sum256</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">SERVER_STATS_DEFAULT_PASSWORD</span><span class="p">))</span>
+<span class="w">        </span><span class="nx">passwordDecodedHash</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">defaultPasswordHash</span><span class="p">[:]</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Compare them to check if they match and are valid</span>
+<span class="w">    </span><span class="nx">validUsername</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">subtle</span><span class="p">.</span><span class="nx">ConstantTimeCompare</span><span class="p">(</span><span class="nx">usernameHash</span><span class="p">[:],</span><span class="w"> </span><span class="nx">usernameDecodedHash</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="nx">validPassword</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">subtle</span><span class="p">.</span><span class="nx">ConstantTimeCompare</span><span class="p">(</span><span class="nx">passwordHash</span><span class="p">[:],</span><span class="w"> </span><span class="nx">passwordDecodedHash</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">validUsername</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">validPassword</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>We then add this check to the top of the <code>handleServerStats</code> function that we saw above. If the credentials are not provided or are invalid, it will return a <code>401</code>, and if you’re accessing this through the browser, it will automatically prompt you again for the credentials:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">ms</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarServer</span><span class="p">)</span><span class="w"> </span><span class="nx">handleServerStats</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Check Basic Authentication</span>
+<span class="w">    </span><span class="nx">username</span><span class="p">,</span><span class="w"> </span><span class="nx">password</span><span class="p">,</span><span class="w"> </span><span class="nx">ok</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">BasicAuth</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">ok</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">!</span><span class="nx">utils</span><span class="p">.</span><span class="nx">ValidCredentials</span><span class="p">(</span><span class="nx">username</span><span class="p">,</span><span class="w"> </span><span class="nx">password</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Add</span><span class="p">(</span><span class="s">&quot;WWW-Authenticate&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Basic realm=\&quot;stats\&quot;&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">w</span><span class="p">.</span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">StatusUnauthorized</span><span class="p">)</span>
+<span class="w">        </span><span class="k">return</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// ... rest of the code ...</span>
+</code></pre></div>
+
+<h4>A Note on Authenticating from the Browser</h4>
+<p>Once you authenticate using <code>Basic Authentication</code> in the browser, it seems like there is no proper way to &ldquo;logout&rdquo; unless you close the whole browser. That’s apparently by design, even in the <a href="https://datatracker.ietf.org/doc/html/rfc7617">RFC</a> there is no mention of logging out. There are a <a href="https://stackoverflow.com/questions/233507/how-to-log-out-user-from-web-site-using-basic-authentication">few workarounds</a> to get around this in browser. However for our use case, I think it should be fine, as it’s mainly designed to be accessed as an API endpoint.</p>
+<h2>User Friendly Logs</h2>
+<p>I really appreciate small details in tools/libraries. Things like well structured logs, colors that highlighted and indicated certain information all falls under that, and shows that the developer really put some thought and effort into the tool developed.</p>
+<p>So I wanted to give users of mmar the same experience, leaning more on the mmar client as that is where I anticipate the majority of the users would be. I already had logs implemented, however it lacked certain things like structuring them in a common format and colors. Additionally, I wanted the user to know what was going on when they ran the mmar client, and information about how to access their tunnel once it has been created.</p>
+<h3>Colored and Formatted HTTP Logs</h3>
+<p>I went with the <a href="https://en.wikipedia.org/wiki/Common_Log_Format">Common Log Format</a> for the logs, minus the <code>host</code>, <code>ident</code> and <code>authuser</code> for now, since I’m not sure if this information would be useful to the user, but that could change if that is not the case. I also added colors to the HTTP logs for nicer visuals. On the server side, since we want all the HTTP logs to be in this format as well, it makes sense to create a simple middleware that handles this for all HTTP logs, so it can it can be added like this:</p>
+<div class="codehilite"><pre><span></span><code><span class="nx">mux</span><span class="p">.</span><span class="nx">Handle</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">logger</span><span class="p">.</span><span class="nx">LoggerMiddleware</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">mmarServer</span><span class="p">))</span>
+</code></pre></div>
+
+<p>To do so, the middleware would need to take in a <code>http.Handler</code> and also return a <code>http.Handler</code> to match the same signature that <code>mux.Handle</code> expects. To do this, we can return a <code>http.HandlerFunc</code> that takes a function with <code>http.ResponseWriter</code> and <code>*http.Request</code> as parameters. That way we should have access to the response information we want to include in the logs from the <code>http.ResponseWriter</code>.</p>
+<p>However, there are 2 pieces of information that cannot be directly extracted from the <code>ResponseWriter</code>; the <strong>response status code</strong> and the <strong>number of bytes returned</strong> to the client. To include them in the <code>ResponseWriter</code> for easy retrieval, we could create a new struct that acts as a wrapper to the <code>ResponseWriter</code> and &ldquo;override&rdquo; the <code>Write</code> and <code>WriteHeader</code> methods (that are each called when writing the content sent to client and the response status code respectively) to store them in fields of the wrapper struct. </p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Wrapping ResponseWriter to capture response status code and content length</span>
+<span class="kd">type</span><span class="w"> </span><span class="nx">WrappedResponseWriter</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span>
+<span class="w">    </span><span class="nx">statusCode</span><span class="w">    </span><span class="kt">int</span>
+<span class="w">    </span><span class="nx">contentLength</span><span class="w"> </span><span class="kt">int64</span>
+<span class="p">}</span>
+
+<span class="c1">// Capture the response status code then call the actual ResponseWriter&#39;s WriteHeader</span>
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">wrw</span><span class="w"> </span><span class="o">*</span><span class="nx">WrappedResponseWriter</span><span class="p">)</span><span class="w"> </span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">statusCode</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">statusCode</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">statusCode</span>
+<span class="w">    </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">.</span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">statusCode</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="c1">// Capture the response content length then call the actual ResponseWriter&#39;s Write</span>
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">wrw</span><span class="w"> </span><span class="o">*</span><span class="nx">WrappedResponseWriter</span><span class="p">)</span><span class="w"> </span><span class="nx">Write</span><span class="p">(</span><span class="nx">data</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">contentLength</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">int64</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">data</span><span class="p">))</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<blockquote>
+<p>A quick note on this approach: It’s straightforward and works quite well for this use case, however in a more complicated use case that involves further processing or interactions with the <code>ResponseWriter</code>, simply wrapping would lose some functionality provided by other interfaces that <code>ResponseWriter</code> implements. You can read more about it in the <a href="https://stackoverflow.com/questions/53272536/how-do-i-get-response-statuscode-in-golang-middleware/63896952#comment93448873_53272925">discussion here</a>.</p>
+</blockquote>
+<p>Now’s lets put our middleware together:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Logger middle to log all HTTP requests handled</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">LoggerMiddleware</span><span class="p">(</span><span class="nx">h</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">Handler</span><span class="p">)</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">Handler</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Initializing WrappedResponseWrapper with default values</span>
+<span class="w">        </span><span class="nx">wrw</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">WrappedResponseWriter</span><span class="p">{</span><span class="nx">ResponseWriter</span><span class="p">:</span><span class="w"> </span><span class="nx">w</span><span class="p">,</span><span class="w"> </span><span class="nx">statusCode</span><span class="p">:</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">StatusOK</span><span class="p">,</span><span class="w"> </span><span class="nx">contentLength</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">}</span>
+<span class="w">        </span><span class="nx">h</span><span class="p">.</span><span class="nx">ServeHTTP</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">wrw</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">LogHTTP</span><span class="p">(</span><span class="nx">r</span><span class="p">,</span><span class="w"> </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">statusCode</span><span class="p">,</span><span class="w"> </span><span class="nx">wrw</span><span class="p">.</span><span class="nx">contentLength</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="kc">false</span><span class="p">)</span>
+<span class="w">    </span><span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>It creates an instance of <code>WrappedResponseWriter</code> we defined, passes it to and calls the passed in handler’s <code>ServeHTTP</code>, then passes in the extracted information to our <code>LogHTTP</code> function that proceeds to print the logs in the proper format and colors. Additionally I added the client’s ID (subdomain) to the logs on the server side, to distinguish the logs belong to which client.</p>
+<p>The <code>LogHTTP</code> function is bit long and not that interesting, but I will share it’s signature and some parts of it to give you the general idea:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Log HTTP requests including their response&#39;s status code and response data length</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">LogHTTP</span><span class="p">(</span><span class="nx">req</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">,</span><span class="w"> </span><span class="nx">statusCode</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="nx">contentLength</span><span class="w"> </span><span class="kt">int64</span><span class="p">,</span><span class="w"> </span><span class="nx">includeSubdomain</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span><span class="w"> </span><span class="nx">colored</span><span class="w"> </span><span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="c1">// ... some code here ...</span>
+
+<span class="w">    </span><span class="c1">// Color HTTP method</span>
+<span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">coloredMethod</span><span class="w"> </span><span class="kt">string</span>
+<span class="w">    </span><span class="k">switch</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Method</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="s">&quot;GET&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="nx">coloredMethod</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">YELLOW</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Method</span><span class="p">)</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="s">&quot;POST&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;PATCH&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;PUT&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="nx">coloredMethod</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Method</span><span class="p">)</span>
+<span class="w">    </span><span class="k">case</span><span class="w"> </span><span class="s">&quot;DELETE&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="nx">coloredMethod</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">RED</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Method</span><span class="p">)</span>
+<span class="w">    </span><span class="k">default</span><span class="p">:</span>
+<span class="w">        </span><span class="nx">coloredMethod</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Method</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span>
+<span class="w">        </span><span class="s">&quot;%s\&quot;%s %s%s%s %s\&quot; %s %d&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">subdomainInfo</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">coloredMethod</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">html</span><span class="p">.</span><span class="nx">EscapeString</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">URL</span><span class="p">.</span><span class="nx">Path</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">hasQueryParams</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">req</span><span class="p">.</span><span class="nx">URL</span><span class="p">.</span><span class="nx">RawQuery</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">req</span><span class="p">.</span><span class="nx">Proto</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">strStatusCode</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">contentLength</span><span class="p">,</span>
+<span class="w">    </span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div>
+
+<p>On the client side, we use the <code>LogHTTP</code> function directly since we don’t make use of the middleware.</p>
+<h3>Helpful mmar Client start logs</h3>
+<p>When a user first installs mmar and runs <code>mmar client</code>, it’s important for them to see information about what is happening and where to go from there. In our case, it’s simply logging the configuration they are attempting to create a tunnel under, and if successfully created, how they can access it, highlighting the important parts.</p>
+<p>To do so, I simply stored the config options in a struct and passed it in to the client (likewise for the server), and added a few helper functions that took care of logging.</p>
+<p>Here’s the config options for the client: </p>
+<div class="codehilite"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">ConfigOptions</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">LocalPort</span><span class="w">      </span><span class="kt">string</span>
+<span class="w">    </span><span class="nx">TunnelHttpPort</span><span class="w"> </span><span class="kt">string</span>
+<span class="w">    </span><span class="nx">TunnelTcpPort</span><span class="w">  </span><span class="kt">string</span>
+<span class="w">    </span><span class="nx">TunnelHost</span><span class="w">     </span><span class="kt">string</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>And here’s how the logging functions are defined, for when the client first starts and when a Tunnel is created:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">LogStartMmarClient</span><span class="p">(</span><span class="nx">tunnelHost</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelTcpPort</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelHttpPort</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">localPort</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">logStr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s">`Starting %s...</span>
+<span class="s">  Creating tunnel:</span>
+<span class="s">    Tunnel Host: %s</span>
+<span class="s">    Tunnel TCP Port: %s</span>
+<span class="s">    Tunnel HTTP Port: %s</span>
+<span class="s">    Local Port: %s</span>
+
+<span class="s">`</span>
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span>
+<span class="w">        </span><span class="nx">logStr</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;mmar client&quot;</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelHost</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelTcpPort</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelHttpPort</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">BLUE</span><span class="p">,</span><span class="w"> </span><span class="nx">localPort</span><span class="p">),</span>
+<span class="w">    </span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">LogTunnelCreated</span><span class="p">(</span><span class="nx">subdomain</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelHost</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelHttpPort</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">localPort</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">logStr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s">`%s</span>
+
+<span class="s">A mmar tunnel is now open on:</span>
+
+<span class="s">&gt;&gt;&gt;  http://%s.%s:%s %s http://localhost:%s</span>
+
+<span class="s">`</span>
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span>
+<span class="w">        </span><span class="nx">logStr</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">GREEN</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Tunnel created successfully!&quot;</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">subdomain</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">tunnelHost</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">tunnelHttpPort</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">ColorLogStr</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">GREEN</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;-&gt;&quot;</span><span class="p">),</span>
+<span class="w">        </span><span class="nx">localPort</span><span class="p">,</span>
+<span class="w">    </span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>For the server, it’s the same idea, however a little simpler, as I didn’t add colors since these logs could likely be accessed through ssh/tmux and the like. I’m not sure all of them would support colors, so sticking to the safe side.</p>
+<h3>Results</h3>
+<p>So after all this, the most important question is how does it look like? Well here&rsquo;s the <strong>before</strong> and <strong>after</strong> screenshots:</p>
+<h4>Before</h4>
+<p align="middle">
+  <img src="./mmar/devlog-004/logs-before.png" />
+</p>
+
+<h3>After</h3>
+<p align="middle">
+  <img src="./mmar/devlog-004/logs-after.png" />
+</p>
+
+<p>Much better!</p>
+<h2>Miscellaneous</h2>
+<p>Finally, I did a little bit of code clean up and bug fixes here and there. There’s a bug in particular I fixed that I thought I’d share. If you remember previously while implementing graceful shutdown of the client, I introduced a <code>context</code> that is cancelled when the client is shutting down, and I had a <code>select</code> statement that would check if the context was cancelled to terminate the goroutine that awaits messages from the server. It looked something like this:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">mc</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarClient</span><span class="p">)</span><span class="w"> </span><span class="nx">ProcessTunnelMessages</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">select</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">Done</span><span class="p">():</span><span class="w"> </span><span class="c1">// Client gracefully shutdown</span>
+<span class="w">            </span><span class="k">return</span>
+<span class="w">        </span><span class="k">default</span><span class="p">:</span>
+<span class="w">            </span><span class="nx">tunnelMsg</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">mc</span><span class="p">.</span><span class="nx">ReceiveMessage</span><span class="p">()</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="c1">// ... some code ...</span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ErrClosed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="nx">logger</span><span class="p">.</span><span class="nx">Log</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">DEFAULT_COLOR</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Tunnel connection disconnected from Server. Exiting...&quot;</span><span class="p">)</span>
+<span class="w">                    </span><span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">                </span><span class="c1">// ... more code ... </span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>This code is not entirely correct. The <code>mc.ReceiveMessage()</code> blocks indefinitely waiting to read data (messages) from the TCP connection from the server, which is technically fine, however that doesn’t give a chance for the <code>select</code> statement to check if the context has been cancelled or not. So more often than not, when you shutdown the client, instead of it gracefully terminating, it would get the <code>net.ErrClosed</code> error, since the server closes the connection after a timeout once it’s informed that the client is shutting down, which is not great.</p>
+<p>A simple way to fix this was to add a read timeout on the client Tunnel&rsquo;s underlying <code>net.Conn</code>. This allows for the loop to go through and runs the <code>select</code> statement again to check if the context has been cancelled to handle it accordingly. Since we already have <code>GRACEFUL_SHUTDOWN_TIMEOUT</code> defined, it would be sufficient to set the read timeout to be half of that.</p>
+<p>Here’s the updated correct version:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">mc</span><span class="w"> </span><span class="o">*</span><span class="nx">MmarClient</span><span class="p">)</span><span class="w"> </span><span class="nx">ProcessTunnelMessages</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">select</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">ctx</span><span class="p">.</span><span class="nx">Done</span><span class="p">():</span><span class="w"> </span><span class="c1">// Client gracefully shutdown</span>
+<span class="w">            </span><span class="k">return</span>
+<span class="w">        </span><span class="k">default</span><span class="p">:</span>
+<span class="w">            </span><span class="c1">// Set read deadline to half the graceful shutdown timeout to</span>
+<span class="w">            </span><span class="c1">// allow detections of graceful shutdowns</span>
+<span class="w">            </span><span class="nx">readDeadline</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Now</span><span class="p">().</span><span class="nx">Add</span><span class="p">((</span><span class="nx">constants</span><span class="p">.</span><span class="nx">GRACEFUL_SHUTDOWN_TIMEOUT</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<span class="w">            </span><span class="nx">mc</span><span class="p">.</span><span class="nx">Tunnel</span><span class="p">.</span><span class="nx">Conn</span><span class="p">.</span><span class="nx">SetReadDeadline</span><span class="p">(</span><span class="nx">readDeadline</span><span class="p">)</span>
+
+<span class="w">            </span><span class="nx">tunnelMsg</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">mc</span><span class="p">.</span><span class="nx">ReceiveMessage</span><span class="p">()</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="c1">// ... some code ... </span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ErrClosed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="nx">logger</span><span class="p">.</span><span class="nx">Log</span><span class="p">(</span><span class="nx">constants</span><span class="p">.</span><span class="nx">DEFAULT_COLOR</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Tunnel connection disconnected from Server. Exiting...&quot;</span><span class="p">)</span>
+<span class="w">                    </span><span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="w">                </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">ErrDeadlineExceeded</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="k">continue</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">                </span><span class="c1">// ... more code ...</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Now it consistently exits correctly when the context is cancelled.</p>
+<h2>Thanks!</h2>
+<p>Thanks for reading, more things to come, see you in the next one!</p>
+
+
+    </main>
+
+    <footer>
+      <p>
+      Find me on
+        <a href="https://github.com/yusuf-musleh">Github</a> -
+        <a href="https://www.linkedin.com/in/yusufmusleh/">Linkedin</a> - 
+        <a href="https://twitter.com/YusufMusleh">X</a>
+      <br>
+      This website was built with <a href="https://github.com/venthur/blag">blag</a>.
+      </p>
+    </footer>
+  </body>
+
+</html>
