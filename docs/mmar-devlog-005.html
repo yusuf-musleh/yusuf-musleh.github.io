@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="author" content="Yusuf Musleh">
+    <meta name="description" content="Simulations, testing and building a DNS Server.">
+    <link rel="alternate" href="/atom.xml" type="application/atom+xml">
+    <link rel="stylesheet" href="/style.css" type="text/css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Yusuf Musleh | mmar - Devlog 5</title>
+
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_e9dXJZIsCVdHzVkBKZGXklKjLGnmtRLXc4xZEaXUJg2',{api_host:'https://us.i.posthog.com', person_profiles: 'identified_only'
+        })
+</script>
+
+</head>
+
+  <body>
+    <header>
+      <h1><a href="/">Yusuf Musleh</a></h1>
+      <nav>
+        <h2>thoughts and devlogs</h2>
+        <ul>
+          <li><h2><a href="/writings.html">Writings</a></h2></li>
+          <li><h2><a href="/archive.html">Archive</a></h2></li>
+          <li><h2><a href="/tags/">Tags</a></h2></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+    
+
+  
+  <h2>mmar - Devlog 5</h2>
+  
+
+  <aside>
+    <p>published on 2024-12-30
+
+    
+    · tagged with
+      
+        <a href="/tags/devlog.html">#devlog</a>, 
+        <a href="/tags/golang.html">#golang</a> and 
+        <a href="/tags/mmar.html">#mmar</a>
+    
+    </p>
+  </aside>
+
+  <p><em>This post is part of a devlog series documenting my progress building <code>mmar</code>, a cross-platform tunnel that exposes your localhost to the world. If you&rsquo;d like to follow along from the beginning, you can find all the devlogs <a href="/tags/mmar.html">here</a>.</em></p>
+<h2>Progress Update</h2>
+<p>It’s been some time since my last devlog, made some decent progress, but kept adding or fixing &ldquo;one more thing&rdquo; before deciding that I should probably take a step back and write about what I did.</p>
+<p>This devlog is all about testing <code>mmar</code>. I recently came across <a href="https://antithesis.com/blog/is_something_bugging_you/">Antithesis’s announcement post</a> and the concept of <strong>Deterministic Simulation Testing (DST)</strong>. The idea of being able to test your program as a whole, in a simulation of the worst scenarios; choppy networks, power outages, disk failures, all in a repeatable (deterministic) fashion. This is especially valuable for distributed systems or systems containing multiple components communicating to each other where faults can occurs on any of the layers.</p>
+<p>It’s a very fascinating concept. Given that <code>mmar</code> is composed of multiple components, I wanted to shape my testing in a similar way, not full on <strong>DST</strong> but simulating actually running/using <code>mmar</code> and throwing a bunch of different scenarios (good and bad) to see how it handles them. With that, I definitely feel like I opened a can of worms while implementing it, but it found a few bugs!</p>
+<h2>Simulation Testing</h2>
+<p>In the context of testing <code>mmar</code>, I want to build the binary and perform tests on it, as opposed to writing unit tests for different parts of the code. I want to put <code>mmar</code> to the test, in a &ldquo;real&rdquo; world simulation. </p>
+<p>To be able to write a simulation test for <code>mmar</code>, we need multiple entities running at the same time:</p>
+<ul>
+<li>a local dev server (this is the simulated localhost)</li>
+<li>a <code>mmar</code> server (run through the built <code>mmar</code> binary)</li>
+<li>a <code>mmar</code> client (also run through the built <code>mmar</code> binary) which creates a tunnel pointing to the local dev server</li>
+<li>clients to perform requests through the tunnel pointing to the local dev server</li>
+</ul>
+<p>Once we are able to run each of these components, we will be able to run a simulation to test and confirm that <code>mmar</code> is acting as we expect. In other words, are the requests through the tunnels going through properly, with the correct headers/body forwarded? Are the responses also being received from the local dev server by the clients complete and correct? The next step would then be to introduce various fault cases.</p>
+<p>Before we get to the various scenarios, let’s first discuss how to run the components mentioned above. Go has a built-in <a href="https://pkg.go.dev/testing">testing framework</a>, so I made sure to make use of it.</p>
+<h3>Running local dev server</h3>
+<p>In Go’s standard library, there is a package called <a href="https://pkg.go.dev/net/http/httptest">httptest</a>. It allows you to create an HTTP server running on a port in order to carry out various HTTP testing. For our local dev server we simply create an instance of the <code>Server</code> provided in this package, configure various endpoint handlers that we would like interact with in our simulation test and then start it. </p>
+<p>Upon starting the <code>Server</code> it will pick an arbitrary port that is available and bind to it, and it’s ready to start responding to requests. Here’s a small snippet of how that looks like:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nx">devserver</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="s">&quot;net/http&quot;</span>
+<span class="w">    </span><span class="s">&quot;net/http/httptest&quot;</span>
+<span class="p">)</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nx">GET_SUCCESS_URL</span><span class="w">  </span><span class="p">=</span><span class="w"> </span><span class="s">&quot;/get&quot;</span>
+<span class="w">    </span><span class="nx">GET_FAILURE_URL</span><span class="w">  </span><span class="p">=</span><span class="w"> </span><span class="s">&quot;/get-fail&quot;</span>
+<span class="w">    </span><span class="nx">POST_SUCCESS_URL</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">&quot;/post&quot;</span>
+<span class="w">    </span><span class="nx">POST_FAILURE_URL</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">&quot;/post-fail&quot;</span>
+<span class="p">)</span>
+
+<span class="kd">type</span><span class="w"> </span><span class="nx">DevServer</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="o">*</span><span class="nx">httptest</span><span class="p">.</span><span class="nx">Server</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">NewDevServer</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="nx">DevServer</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">mux</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">setupMux</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">DevServer</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">httptest</span><span class="p">.</span><span class="nx">NewServer</span><span class="p">(</span><span class="nx">mux</span><span class="p">),</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">setupMux</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">ServeMux</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">mux</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">NewServeMux</span><span class="p">()</span>
+
+<span class="w">    </span><span class="nx">mux</span><span class="p">.</span><span class="nx">Handle</span><span class="p">(</span><span class="nx">GET_SUCCESS_URL</span><span class="p">,</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">(</span><span class="nx">handleGet</span><span class="p">))</span>
+<span class="w">    </span><span class="nx">mux</span><span class="p">.</span><span class="nx">Handle</span><span class="p">(</span><span class="nx">GET_FAILURE_URL</span><span class="p">,</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">(</span><span class="nx">handleGetFail</span><span class="p">))</span>
+<span class="w">    </span><span class="nx">mux</span><span class="p">.</span><span class="nx">Handle</span><span class="p">(</span><span class="nx">POST_SUCCESS_URL</span><span class="p">,</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">(</span><span class="nx">handlePost</span><span class="p">))</span>
+<span class="w">    </span><span class="nx">mux</span><span class="p">.</span><span class="nx">Handle</span><span class="p">(</span><span class="nx">POST_FAILURE_URL</span><span class="p">,</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">(</span><span class="nx">handlePostFail</span><span class="p">))</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">mux</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Here we have a couple of different endpoints and their handlers defined. How do these handlers look like? Well, one of our goals for writing these simulation tests is to verify that the requests are being received by the local dev server and verify the responses are being received by the clients. For the response aspect, it&rsquo;s straightforward, we can simply have each endpoint handler return a specific response, including additional response headers and verify that they were received. However for the request data verification how do we know that the local dev server receive the request data we sent it? One way to do it is by echoing back all the request headers and body as part of the response.</p>
+<p>That way we could keep all the testing/verification code in one place, and keep the logic for the local dev server in its own file. Here’s an example of how one of the <code>POST</code> request handlers looks like:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">handlePost</span><span class="p">(</span><span class="nx">w</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Include echo of request headers/body in response to confirm they were received</span>
+<span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">reqBody</span><span class="w"> </span><span class="kd">interface</span><span class="p">{}</span>
+<span class="w">    </span><span class="nx">jsonDecoder</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">json</span><span class="p">.</span><span class="nx">NewDecoder</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">Body</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">jsonDecoder</span><span class="p">.</span><span class="nx">Decode</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">reqBody</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to decode request body to json&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">respBody</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">        </span><span class="s">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">            </span><span class="s">&quot;posted&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;data&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="s">&quot;echo&quot;</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">            </span><span class="s">&quot;reqHeaders&quot;</span><span class="p">:</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">Header</span><span class="p">,</span>
+<span class="w">            </span><span class="s">&quot;reqBody&quot;</span><span class="p">:</span><span class="w">    </span><span class="nx">reqBody</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">})</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Failed to marshal response for POST: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Content-Type&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;application/json&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="c1">// Add custom header to response to confirm to confirm that they</span>
+<span class="w">    </span><span class="c1">// propograte when going through mmar</span>
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Simulation-Header&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;devserver-handle-post-success&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">WriteHeader</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">StatusOK</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">w</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">respBody</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Finally, how do we actually run our new local dev server in the simulation tests? We simply import it in our test file and start it in the simulation test case:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nx">simulations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="s">&quot;github.com/yusuf-musleh/mmar/simulations/devserver&quot;</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">StartLocalDevServer</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="nx">devserver</span><span class="p">.</span><span class="nx">DevServer</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">ds</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">devserver</span><span class="p">.</span><span class="nx">NewDevServer</span><span class="p">()</span>
+<span class="w">    </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">&quot;Started local dev server on: http://localhost:%v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">ds</span><span class="p">.</span><span class="nx">Port</span><span class="p">())</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">ds</span>
+<span class="p">}</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">TestSimulation</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+
+<span class="w">    </span><span class="nx">localDevServer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">StartLocalDevServer</span><span class="p">()</span>
+<span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Close</span><span class="p">()</span>
+
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Great! Now we have a local dev server that successfully starts and can handle various HTTP requests. Let’s look at the next component of our simulation test.</p>
+<h3>Running mmar server &amp; client</h3>
+<p>For this to be a true simulation, we need to be able to run the <code>mmar</code> executable to start both the <code>mmar server</code> and <code>mmar client</code>. To access the <code>mmar</code> executable, I simply pre-built it and placed it in the same directory as the simulation test so it can be accessible. This could probably be automated in the future.</p>
+<p>To run an executable from Go, there is a standard library package called <a href="https://pkg.go.dev/os/exec">os/exec</a>. This package allows you to execute commands (executables) with arguments, in addition to passing in the <code>Context</code> for more control over cancellation. Passing in the context allows us to gracefully shutdown the <code>mmar client</code>s and <code>mmar server</code> at different stages of the simulation test.</p>
+<p>For the purposes of the simulation test, we just need to run <code>mmar server</code> in its default settings:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="s">&quot;os/exec&quot;</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">StartMmarServer</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">cmd</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">exec</span><span class="p">.</span><span class="nx">CommandContext</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;./mmar&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;server&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Stdin</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">Stdin</span>
+<span class="w">    </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Stdout</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">Stdout</span>
+<span class="w">    </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Stderr</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">Stderr</span>
+
+<span class="w">    </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Cancel</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="kt">error</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;cancelled, server&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">wait</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">NewTimer</span><span class="p">(</span><span class="mi">4</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<span class="w">        </span><span class="o">&lt;-</span><span class="nx">wait</span><span class="p">.</span><span class="nx">C</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Process</span><span class="p">.</span><span class="nx">Signal</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">Interrupt</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Run</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">!</span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Canceled</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Notice that we pass in the path to the <code>mmar</code> executable in the same directory. We also configure the logs/errors to direct to <code>STDOUT</code>/<code>STDERR</code> so we can see them when the command is run in the context of the test. Additionally, I configured the cancellation handler to wait a few seconds before sending the interrupt signal, this is mainly because the both the server and the clients share the same <code>context</code> so I wanted to allow more time for the clients to showdown before the server begins to shutdown. Then finally we run the command.</p>
+<p>Similarly, to run the <code>mmar client</code> we run the executable command with some arguments and some additional logic:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">StartMmarClient</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">urlCh</span><span class="w"> </span><span class="kd">chan</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">localDevServerPort</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">cmd</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">exec</span><span class="p">.</span><span class="nx">CommandContext</span><span class="p">(</span>
+<span class="w">        </span><span class="nx">ctx</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;./mmar&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;client&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;--tunnel-host&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;localhost&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;--local-port&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">localDevServerPort</span><span class="p">,</span>
+<span class="w">    </span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Pipe Stderr To capture logs for extracting the tunnel url</span>
+<span class="w">    </span><span class="nx">pipe</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">StderrPipe</span><span class="p">()</span>
+
+<span class="w">    </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Cancel</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="kt">error</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;cancelled, client&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Process</span><span class="p">.</span><span class="nx">Signal</span><span class="p">(</span><span class="nx">os</span><span class="p">.</span><span class="nx">Interrupt</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Start</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">!</span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Canceled</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to start&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Read through the logs (stderr), print them and extract the tunnel url</span>
+<span class="w">    </span><span class="c1">// to send back through the channel</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">stdoutReader</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">bufio</span><span class="p">.</span><span class="nx">NewReader</span><span class="p">(</span><span class="nx">pipe</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">line</span><span class="p">,</span><span class="w"> </span><span class="nx">readErr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">stdoutReader</span><span class="p">.</span><span class="nx">ReadString</span><span class="p">(</span><span class="sc">&#39;\n&#39;</span><span class="p">)</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="nx">readErr</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Print</span><span class="p">(</span><span class="nx">line</span><span class="p">)</span>
+<span class="w">            </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">extractTunnelURL</span><span class="p">(</span><span class="nx">line</span><span class="p">)</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&quot;&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nx">urlCh</span><span class="w"> </span><span class="o">&lt;-</span><span class="w"> </span><span class="nx">tunnelUrl</span>
+<span class="w">                </span><span class="k">break</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">            </span><span class="nx">line</span><span class="p">,</span><span class="w"> </span><span class="nx">readErr</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">stdoutReader</span><span class="p">.</span><span class="nx">ReadString</span><span class="p">(</span><span class="sc">&#39;\n&#39;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="c1">// Print extra line at the end</span>
+<span class="w">        </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">()</span>
+<span class="w">    </span><span class="p">}()</span>
+
+<span class="w">    </span><span class="nx">waitErr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cmd</span><span class="p">.</span><span class="nx">Wait</span><span class="p">()</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">waitErr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">!</span><span class="nx">errors</span><span class="p">.</span><span class="nx">Is</span><span class="p">(</span><span class="nx">waitErr</span><span class="p">,</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Canceled</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to wait&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">waitErr</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>There are a few things that I want to highlight here. The first is that we pass in the port of the local dev server to the command, since as we saw we get a random available port every time the local dev server starts.</p>
+<p>Next, is that when running a <code>mmar client</code>, by design we get a random tunnel url, that holds a new random subdomain. Since we are running the actual executable we have no control over what url gets generated every time we run a client or run the simulation tests. So we need a way to extract it from the logs, just like a normal user would use <code>mmar</code>. To do so, we need to pipe the logs and extract the tunnel url from it. We pipe <code>STDERR</code> rather than <code>STDOUT</code> because in Go&rsquo;s <code>log</code> package, logs are actually written to <code>STDERR</code> by default. The tunnel url is extracted by simply looping through each line in a separate goroutine and running a regex to extract it if found. In both cases, we print the line so it also appears in the test output (I might change this as I run multiple <code>mmar</code> clients, currently still building the simulation test out for 1 client).</p>
+<p>Once the tunnel url is extracted, we write it to a channel that is passed in from the main simulation test so it can later be used when making requests to the tunnel. The <code>Cancel</code> handler simply sends the interrupt signal right away to simulate a user pressing <code>ctrl+c</code> to shutdown the client.</p>
+<p>Going back to our <code>TestSimulation</code>, these functions are called in separate goroutines as follows:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">TestSimulation</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">simulationCancel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">WithCancel</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">())</span>
+
+<span class="w">    </span><span class="nx">localDevServer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">StartLocalDevServer</span><span class="p">()</span>
+<span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Close</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarServer</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">wait</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">NewTimer</span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<span class="w">    </span><span class="o">&lt;-</span><span class="nx">wait</span><span class="p">.</span><span class="nx">C</span>
+<span class="w">    </span><span class="nx">clientUrlCh</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kd">chan</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarClient</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">clientUrlCh</span><span class="p">,</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Port</span><span class="p">())</span>
+
+<span class="w">    </span><span class="c1">// Wait for tunnel url</span>
+<span class="w">    </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">clientUrlCh</span>
+
+<span class="w">    </span><span class="c1">// ... more code ...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>After starting the local dev server (from the previous step), we start the <code>mmar server</code>, wait a few seconds then start a <code>mmar client</code> as new goroutines, passing in the <code>simulationCtx</code>. We then have a channel receiver waiting for the tunnel url to be extracted.</p>
+<p>We now have all the components needed for <code>mmar</code> to operate, let&rsquo;s start making requests to our tunnel!</p>
+<h3>Creating clients to perform requests</h3>
+<p>Clients in this context represent the end users who would be accessing the local dev server through the tunnel, for example through a browser or by making requests through code. To do so in the simulation test, we can create clients using Go’s <a href="https://pkg.go.dev/net/http">net/http</a> package and make requests to the various endpoints in our local dev server through the <code>mmar</code> tunnel and perform some checks and verifications that things are working as expected.</p>
+<p>Let’s take a look at how to do this for the <code>POST</code> request:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Test to verify successful POST request through mmar tunnel returned expected request/response</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">verifyPostRequestSuccess</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">,</span><span class="w"> </span><span class="nx">client</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Client</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">reqBody</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">        </span><span class="s">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;payload&quot;</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">            </span><span class="s">&quot;some&quot;</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;data&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s">&quot;moreData&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">serializedReqBody</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">reqBody</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">req</span><span class="p">,</span><span class="w"> </span><span class="nx">reqErr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">NewRequest</span><span class="p">(</span><span class="s">&quot;POST&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelUrl</span><span class="o">+</span><span class="nx">devserver</span><span class="p">.</span><span class="nx">POST_SUCCESS_URL</span><span class="p">,</span><span class="w"> </span><span class="nx">bytes</span><span class="p">.</span><span class="nx">NewBuffer</span><span class="p">(</span><span class="nx">serializedReqBody</span><span class="p">))</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">reqErr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatalf</span><span class="p">(</span><span class="s">&quot;Failed to create new request: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">reqErr</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="c1">// Adding custom header to confirm that they are propogated when going through mmar</span>
+<span class="w">    </span><span class="nx">req</span><span class="p">.</span><span class="nx">Header</span><span class="p">.</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Simulation-Test&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;verify-post-request-success&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="nx">resp</span><span class="p">,</span><span class="w"> </span><span class="nx">respErr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">Do</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">respErr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">&quot;Failed to get response: %v&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">respErr</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">expectedReqHeaders</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">][]</span><span class="kt">string</span><span class="p">{</span>
+<span class="w">        </span><span class="s">&quot;User-Agent&quot;</span><span class="p">:</span><span class="w">      </span><span class="p">{</span><span class="s">&quot;Go-http-client/1.1&quot;</span><span class="p">},</span><span class="w"> </span><span class="c1">// Default header in golang client</span>
+<span class="w">        </span><span class="s">&quot;Accept-Encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="s">&quot;gzip&quot;</span><span class="p">},</span><span class="w">               </span><span class="c1">// Default header in golang client</span>
+<span class="w">        </span><span class="s">&quot;Simulation-Test&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="s">&quot;verify-post-request-success&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="s">&quot;Content-Length&quot;</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="nx">strconv</span><span class="p">.</span><span class="nx">Itoa</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">serializedReqBody</span><span class="p">))},</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">expectedBody</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">        </span><span class="s">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="s">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">            </span><span class="s">&quot;posted&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;data&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="s">&quot;echo&quot;</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}{</span>
+<span class="w">            </span><span class="s">&quot;reqHeaders&quot;</span><span class="p">:</span><span class="w"> </span><span class="nx">expectedReqHeaders</span><span class="p">,</span>
+<span class="w">            </span><span class="s">&quot;reqBody&quot;</span><span class="p">:</span><span class="w">    </span><span class="nx">reqBody</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">marshaledBody</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">expectedBody</span><span class="p">)</span>
+
+<span class="w">    </span><span class="nx">expectedResp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">expectedResponse</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">statusCode</span><span class="p">:</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">StatusOK</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">headers</span><span class="p">:</span><span class="w"> </span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span>
+<span class="w">            </span><span class="s">&quot;Content-Length&quot;</span><span class="p">:</span><span class="w">    </span><span class="nx">strconv</span><span class="p">.</span><span class="nx">Itoa</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">marshaledBody</span><span class="p">)),</span>
+<span class="w">            </span><span class="s">&quot;Content-Type&quot;</span><span class="p">:</span><span class="w">      </span><span class="s">&quot;application/json&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s">&quot;Simulation-Header&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;devserver-handle-post-success&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="nx">expectedBody</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">validateRequestResponse</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">expectedResp</span><span class="p">,</span><span class="w"> </span><span class="nx">resp</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;verifyPostRequestSuccess&quot;</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Most of this code is self-explanatory. At a high level, we make a <code>POST</code> request to the local dev server’s post request handler endpoint. Then verify that both the request headers/body and the response headers/body are as we expect.</p>
+<p>Pretty straightforward right? Let’s see how it looks like inside our <code>TestSimulation</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">TestSimulation</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">simulationCancel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">WithCancel</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">())</span>
+
+<span class="w">    </span><span class="nx">localDevServer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">StartLocalDevServer</span><span class="p">()</span>
+<span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Close</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">dnsserver</span><span class="p">.</span><span class="nx">StartDnsServer</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarServer</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">wait</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">NewTimer</span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<span class="w">    </span><span class="o">&lt;-</span><span class="nx">wait</span><span class="p">.</span><span class="nx">C</span>
+<span class="w">    </span><span class="nx">clientUrlCh</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kd">chan</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarClient</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">clientUrlCh</span><span class="p">,</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Port</span><span class="p">())</span>
+
+<span class="w">    </span><span class="c1">// Wait for tunnel url</span>
+<span class="w">    </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">clientUrlCh</span>
+
+<span class="w">    </span><span class="c1">// Initialize http client</span>
+<span class="w">    </span><span class="nx">client</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">httpClient</span><span class="p">()</span>
+
+<span class="w">    </span><span class="c1">// Perform simulated usage tests</span>
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+<span class="w">    </span><span class="nx">verifyPostRequestSuccess</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">client</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelUrl</span><span class="p">)</span>
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Now we have all the components to finally run a simulation test. Let’s see what happens when we run <code>go test</code>:</p>
+<p align="middle">
+  <img src="./mmar/devlog-005/dns-lookup-error.png" />
+</p>
+
+<p>That did not work&hellip; <code>no such host</code> looks like a DNS issue. Let’s try to make a request to the server through <code>curl</code>. To do that, we’ll run the simulation test again and in another terminal we make a curl request (to the new tunnel url) before it shuts down:</p>
+<p align="middle">
+  <img src="./mmar/devlog-005/curl-cmd.png" />
+</p>
+
+<p>Interesting, it seems to be working fine through curl. How about if we try accessing the simulation test tunnel through the browser by hitting another <code>GET</code> method endpoint:</p>
+<p align="middle">
+  <img src="./mmar/devlog-005/browser-request.png" />
+</p>
+
+<p>That seems to be working fine as well&hellip; which makes it even more interesting. Why didn’t the request made through the test code work? Both <code>curl</code> and chrome had no issues &ldquo;finding&rdquo; the host, however in the simulation test, I still get hit with the <code>no such host</code> error.</p>
+<p>I began digging to try to see what might be causing this behavior. I found some interesting information. According to <a href="https://datatracker.ietf.org/doc/html/rfc6761#section-6.3">RFC 6761</a> <em>Special-Use Domain Names</em>:</p>
+<blockquote>
+6.3. Domain Name Reservation Considerations for "localhost."
+</br>  
+The domain "localhost." and any names falling within ".localhost." are special in the following ways:
+</br>
+...
+</br>
+3. Name resolution APIs and libraries SHOULD recognize localhost names as special and SHOULD always return the IP loopback address for address queries and negative responses for all other query types.  Name resolution APIs SHOULD NOT send queries for localhost names to their configured caching DNS server(s).
+</br>
+...
+</blockquote>
+
+<p>That means that any <code>localhost</code> domains including subdomains should always loopback to <code>127.0.0.1</code> (or <code>::1</code> if IPv6). It turns out that chrome <a href="https://issues.chromium.org/issues/41175806#comment9">implements</a> this <a href="https://github.com/curl/curl/issues/9192">as well as curl</a>. <em>However</em>, in Go, the default resolver utilizes the default DNS server set on the OS you are running on for name resolution. In my case, if you notice in the look up error screenshot above, it says <code>lookup l10649.localhost on 0.250.250.200:53: no such host</code>. If we take a look at <code>/etc/resolver.conf</code> of the Docker container where I am running all this we’ll see that IP defined as the name server:</p>
+<div class="codehilite"><pre><span></span><code>$<span class="w"> </span>cat<span class="w"> </span>/etc/resolv.conf<span class="w"> </span>
+<span class="c1"># Generated by Docker Engine.</span>
+<span class="c1"># This file can be edited; Docker Engine will not make further changes once it</span>
+<span class="c1"># has been modified.</span>
+
+nameserver<span class="w"> </span><span class="m">0</span>.250.250.200
+
+<span class="c1"># Based on host file: &#39;/etc/resolv.conf&#39;</span>
+<span class="c1"># Overrides: []</span>
+</code></pre></div>
+
+<p>So when we make a request through Go to the localhost subdomain, it is actually attempting to lookup <code>l10649.localhost</code> which is obviously not a real domain and will fail.</p>
+<p>This wasn’t something I was really expecting to deal with when I set out to write a simulation test. Naturally I wanted to solve this issue with the least amount of time and effort to get back to the &ldquo;actual&rdquo; work of writing the tests. However I had a few constraints:</p>
+<ol>
+<li>I didn’t want to modify any files outside the <code>mmar</code> repo. Things like making changes to the <code>/etc/hosts</code> or <code>/etc/resolv.conf</code> were out of the question because I can’t assume all developers would run these tests inside a Docker container (nor do I want that as a requirement) and I wanted to avoid making changes to other developers’ setups implicitly. This constraint would also be useful if I decide to throw these simulation tests up on CI I wouldn’t need to include some additional setup.</li>
+<li>I didn’t want to introduce a dependency by using an external solution, like <a href="https://thekelleys.org.uk/dnsmasq/doc.html">Dnsmasq</a> which you could most likely configure it to work with subdomains on localhost. As I mentioned in my first <a href="/mmar-devlog-001.html">mmar devlog</a>, I’m building <code>mmar</code> without relying on any external dependancies outside Go’s Standard Library, so I definitely didn’t want to introduce one here just to get the simulation tests working.</li>
+</ol>
+<p>With these constraints in mind, I set off to solve this problem. The first thing I attempted was to try and modify the <code>http.Client</code> to always resolve to localhost. If I could &ldquo;override&rdquo; <code>http.Client</code> by creating my own and implementing all the relevant methods to match its interface. As I began taking this approach, I quickly realized a major flaw in it. There were so many methods that need to be implemented to be able to &ldquo;override&rdquo; <code>http.Client</code> to include my custom functionality. As I was implementing the 5th method, things were getting messy, I paused and took a step back. Maybe this wasn’t the best way forward.</p>
+<p>I took a deeper look at the <code>net</code> and <code>net/http</code> packages, looking for some possible paths forward. I found the <code>net.Resolver</code> struct quite interesting. It’s responsible for <a href="https://pkg.go.dev/net#Resolver">looking up</a> the address you pass in to a <code>http.Client</code> request under the hood. As part of its interface it lets you define a <code>Dial</code> function which is responsible to make connections to the DNS server, provided its IP and port. So <em>what if</em> as part of running the simulation tests, we start a basic DNS server that always resolves to localhost and point the client’s resolver to its IP/port? That would theoretically solve our problem and still be within the constraints we have set above. I guess it was best to find a proper solution for this problem after all instead of hacking my way through it. It was time to roll up them sleeves and implement a basic DNS server :D</p>
+<h2>Building a (very) Basic DNS Server</h2>
+<p>A DNS server essentially maps a domain name (eg: google.com) to its IP (eg: 142.250.185.46). When a client makes a request to a certain domain, the resolver communicates with the DNS to determine which IP address to resolve this domain name to. In the case of the simulation test, all I want my DNS server to do is <strong>always</strong> resolve to localhost, similar to how <code>curl</code> and the browsers do so but on the DNS level rather than the client level.</p>
+<p>By default, <code>net.Resolver</code> uses UDP when communicating with the DNS server. In general UDP is used as it is much faster and more scalable, especially for the use case of retrieving addresses quickly. So I decided to follow suit, creating a server that listens to UDP connections on a specific port. I just wanted to see if in fact <code>net.Resolver</code> will attempt to communicate with my server if I direct the <code>Dial</code> function to it, before implementing the DNS server.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nx">dnsserver</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="s">&quot;log&quot;</span>
+<span class="w">    </span><span class="s">&quot;net&quot;</span>
+<span class="w">    </span><span class="s">&quot;fmt&quot;</span>
+<span class="p">)</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nx">LOCALHOST_DNS_SERVER</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s">&quot;127.0.0.1:3535&quot;</span>
+<span class="p">)</span>
+
+<span class="kd">func</span><span class="w"> </span><span class="nx">StartDnsServer</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">addr</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ResolveUDPAddr</span><span class="p">(</span><span class="s">&quot;udp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">LOCALHOST_DNS_SERVER</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to resolve UDP Address&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">udpConn</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ListenUDP</span><span class="p">(</span><span class="s">&quot;udp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">addr</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to start Basic DNS server&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">buffer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="mi">512</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">udpWriteAddr</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">udpConn</span><span class="p">.</span><span class="nx">ReadFromUDP</span><span class="p">(</span><span class="nx">buffer</span><span class="p">)</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to read from UDP connection&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;DNS request&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">buffer</span><span class="p">[:</span><span class="nx">n</span><span class="p">])</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Running this function would start a server on port <code>3535</code> listening for UDP connections. Let’s see what happens when we direct <code>net.Resolver</code> to it. The following function returns a <code>http.Client</code> with a resolver that points to our DNS server:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">httpClient</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Client</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Adding custom resolver that points to our simulated DNS Server to</span>
+<span class="w">    </span><span class="c1">// handle subdomain on localhost</span>
+<span class="w">    </span><span class="nx">r</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">net</span><span class="p">.</span><span class="nx">Resolver</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">PreferGo</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">Dial</span><span class="p">:</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">network</span><span class="p">,</span><span class="w"> </span><span class="nx">address</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">net</span><span class="p">.</span><span class="nx">Conn</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">Dial</span><span class="p">(</span><span class="s">&quot;udp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">dnsserver</span><span class="p">.</span><span class="nx">LOCALHOST_DNS_SERVER</span><span class="p">)</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">dial</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">net</span><span class="p">.</span><span class="nx">Dialer</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">Resolver</span><span class="p">:</span><span class="w"> </span><span class="nx">r</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">tp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">http</span><span class="p">.</span><span class="nx">Transport</span><span class="p">{</span>
+<span class="w">        </span><span class="nx">DialContext</span><span class="p">:</span><span class="w"> </span><span class="nx">dial</span><span class="p">.</span><span class="nx">DialContext</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">client</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">http</span><span class="p">.</span><span class="nx">Client</span><span class="p">{</span><span class="nx">Transport</span><span class="p">:</span><span class="w"> </span><span class="nx">tp</span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">client</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Now if we pass in the <code>http.Client</code> that is created and returned from the function above into <code>verifyPostRequestSuccess</code> we had above so the request is performed using the new resolver and then run the tests:</p>
+<div class="codehilite"><pre><span></span><code>...
+DNS request [163 155 1 0 0 1 0 0 0 0 0 1 6 116 114 122 109 105 122 9 108 111 99 97 108 104 111 115 116 0 0 28 0 1 0 0 41 4 208 0 0 0 0 0 0]
+DNS request [69 255 1 0 0 1 0 0 0 0 0 1 6 116 114 122 109 105 122 9 108 111 99 97 108 104 111 115 116 0 0 1 0 1 0 0 41 4 208 0 0 0 0 0 0]
+...
+</code></pre></div>
+
+<p>Interesting! Our DNS server received some data when the request was made. In order to understand what these bytes represent and how we should respond, we need to take a quick look at the DNS protocol. </p>
+<h3>Speedrunning DNS Protocol</h3>
+<p>Without getting too deep into the details and for the purposes of our use case, I only needed to understand what is being sent, and based on that, how I should respond. If we take a quick look at the <a href="https://datatracker.ietf.org/doc/html/rfc1035#autoid-39">RFC</a> we find that all communication is done through a formatted <strong>message</strong>. A message is structured as follows:</p>
+<div class="codehilite"><pre><span></span><code>  +---------------------+
+  |        Header       |
+  +---------------------+
+  |       Question      | The question for the name server
+  +---------------------+
+  |        Answer       | Resource Records (RRs) answering the question
+  +---------------------+
+  |      Authority      | Resource Records (RRs) pointing toward an authority
+  +---------------------+
+  |      Additional     | Resource Records (RRs) holding additional information
+  +---------------------+
+</code></pre></div>
+
+<p>The sections that we are mainly interested in are the <code>Header</code>, <code>Question</code> and <code>Answer</code> sections.</p>
+<h4>Header Section</h4>
+<p>The <code>Header</code> section contains information about the message itself, for example whether this message is a <em>question</em> to the DNS server or an <em>answer</em> from the DNS server. From the RFC, the header looks like the following:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                      ID                       |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                    QDCOUNT                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                    ANCOUNT                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                    NSCOUNT                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                    ARCOUNT                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>I’ll only mention the relevant parts that we care about. The first 2 bytes (16 bits) represent the ID of the message, it needs to be present in the reply (or answer) for this message. The next 2 bytes have more data broken down, the 1st bit (QR) represents whether this message is a <em>question</em> (0) or an <em>answer</em> (1). For the remaining 15 bits we don’t really need to worry about since we are not dealing with any special cases, so we can safely ignore them (or set them all to 0s). Feel free to read further into the RFC or other sources if you are interested in diving deeper (we’re speed running here :D). The next 2 bytes (QDCOUNT) represent number of questions sent to DNS server, the 2 bytes after that (ANCOUNT) represent number of records in the answers. The final 4 bytes (NSCOUNT) and (ARCOUNT) we don’t need to worry about as well.</p>
+<p>If we look back at the data sent to our DNS server, and we extract the headers, lets map one of them to the header format above:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">163</span><span class="w"> </span><span class="mf">155</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<p>The first 12 bytes (96 bits) represent the header, which maps to the following:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           163         |           155         |
+  |            =          |            =          |
+  | 1  0  1  0  0  0  1  1| 1  0  0  1  1  0  1  1|   ID: 163 155 (0xA39B in Hex)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            1          |            0          |
+  |            =          |            =          |
+  | 0| 0  0  0| 0| 0| 0| 1| 0  0  0| 0  0  0  0  0|   QR: 0 (means its a Question)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            1          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  1|   QDCOUNT: 1 (only 1 Question)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            0          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|   ANCOUNT: 0 (0 answers)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            0          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|   NSCOUNT (Not important to us)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            1          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  1|   ARCOUNT (Not important to us)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<h4>Question Section</h4>
+<p>The <code>Question</code> section contains a number of questions (equal to QDCOUNT) that are being asked to the DNS server, typically there is just 1 question. You can think of a question as what the client is asking to lookup a particular domain using the DNS server. </p>
+<p>Each question entry has the following:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                                               |
+  /                     QNAME                     /
+  /                                               /
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                     QTYPE                     |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                     QCLASS                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>The <code>QNAME</code> section is of variable length as it varies depending on the domain name being lookuped up. It represents a sequence of all the subdomains in the domain provided. For each one it includes a number representing the length of the current subdomain, followed up by bytes of that length representing that subdomain, followed by either another number representing another subdomain or a null byte (0) meaning the end of the <code>QNAME</code> section. We will look at how this looks like for the messages we got, but as a quick example to help with understanding, the domain <code>google.com</code> would be represented like:</p>
+<div class="codehilite"><pre><span></span><code>6 [6 bytes, 1 byte for each char in &#39;google&#39;] 3 [3 bytes, 1 byte for each char in &#39;com&#39;] 0
+</code></pre></div>
+
+<p>The <code>QTYPE</code> section consists of 2 bytes, which represent what type of question is being asked. There are quite a few different types, however for our purposes the main ones we are concerned about are <code>A</code> (IPv4 address) and <code>AAAA</code> (IPv6 address). The answer (response) should match accordingly.</p>
+<p>The <code>QCLASS</code> section represents the class of which this domain belongs to. While reading around a bit, it seems like this field had some legacy values but the main one we are concerned with is <code>1 = IN</code> (Internet), which also happens to be the default.</p>
+<p>Now for the fun part, here are the following bytes after the header, representing the question section:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">6</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">114</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">109</span><span class="w"> </span><span class="mf">105</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">9</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">99</span><span class="w"> </span><span class="mf">97</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">104</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">115</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<p>Since there’s quite a bit of data for the <code>QNAME</code>, let’s look at it in a more compact way:</p>
+<ul>
+<li><code>6</code> means we have 6 bytes (chars):<ul>
+<li><code>116</code> =&gt; <code>t</code></li>
+<li><code>114</code> =&gt; <code>r</code></li>
+<li><code>122</code> =&gt; <code>z</code></li>
+<li><code>109</code> =&gt; <code>m</code></li>
+<li><code>105</code> =&gt; <code>i</code></li>
+<li><code>122</code> =&gt; <code>z</code></li>
+<li>All together: <code>trzmiz</code></li>
+</ul>
+</li>
+<li><code>9</code> means we have 9 bytes (char)<ul>
+<li><code>108</code> =&gt; <code>l</code></li>
+<li><code>111</code> =&gt; <code>o</code></li>
+<li><code>99</code> =&gt; <code>c</code></li>
+<li><code>97</code> =&gt; <code>a</code></li>
+<li><code>108</code> =&gt; <code>l</code></li>
+<li><code>104</code> =&gt; <code>h</code></li>
+<li><code>111</code> =&gt; <code>o</code></li>
+<li><code>115</code> =&gt; <code>s</code></li>
+<li><code>116</code> =&gt; <code>t</code></li>
+<li>All together: <code>localhost</code></li>
+</ul>
+</li>
+<li><code>0</code> means end of <code>QNAME</code></li>
+</ul>
+<p>The requested domain is <code>trzmiz.localhost</code>, we can finally see a <code>mmar</code> tunnel url! Let’s look at the remaining parts of the question section:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                                               |
+  /                     QNAME                     /  (We saw above)
+  /                                               /
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           0           |           28          |
+  |           =           |           =           |  QTYPE: 28 (means AAAA IPv6 address record)
+  | 0  0  0  0  0  0  0  0| 0  0  0  1  1  1  0  0|
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           0           |           1           |
+  |           =           |           =           |  QCLASS: 1 (means its IN - Internet)
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  1|
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>The <code>QTYPE</code> value for <code>AAAA</code> <a href="https://www.rfc-editor.org/rfc/rfc3596.txt#:~:text=The%20AAAA%20resource%20record%20type,type%20is%2028%20(decimal)">IPv6 records is 28</a>. The <code>QCLASS</code> is <code>1</code> as we’ve seen earlier this means <code>IN</code> or Internet.</p>
+<h4>Remaining Data</h4>
+<p>For the rest of the bytes in the message:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">41</span><span class="w"> </span><span class="mf">4</span><span class="w"> </span><span class="mf">208</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span>
+</code></pre></div>
+
+<p>Since we know from the previous sections that this DNS message is a Question and has 0 Answers, the data in the remaining bytes represents the <strong>Additional Section</strong> which we don’t really care about, so we’ll just ignore it.</p>
+<h3>Constructing a Response</h3>
+<p>So far we parsed and understood the DNS message we received from Go’s client when going through our DNS server. Now we need to actually respond, good thing we now know how to speak DNS :D</p>
+<p>So to keep things as simple as possible. This DNS server will always point you to <code>::1</code> which is the loop back address (<code>localhost</code>) for <code>AAAA</code> (IPv6) records.</p>
+<blockquote>
+<p>Note: Again the main goal is to get the simulation test to properly resolve localhost subdomains rather than a complete and correct implementation of the DNS protocol. I experimented a bit with only responding to one type of record rather than handling both, and that seems to give me the same outcome, so I opted to always respond with AAAA (IPv6) answers.</p>
+</blockquote>
+<h4>Response Header</h4>
+<p>To build the <code>Header</code> for the response, the first step is to include the same <code>ID</code> that was provided in the DNS query. Next, we set the (QR) flag to <code>1</code> in the <code>Header</code> that indicates this is a response, for the remaining 15 bits in that row we don’t care about so we can just zero them out. Next we include the same questions count, add a <code>1</code> for the answers count, copy over the same authority records count (they are zero), and zero out the additional records count since we will not respond with any.</p>
+<p>Here’s how our response <code>Header</code> looks like:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           163         |           155         |
+  |            =          |            =          |
+  | 1  0  1  0  0  0  1  1| 1  0  0  1  1  0  1  1|   ID: 163 155 (same ID)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           128         |            0          |
+  |            =          |            =          |
+  | 1| 0  0  0| 0| 0| 0| 0| 0  0  0| 0  0  0  0  0|   QR: 1 (means its an Answer)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            1          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  1|   QDCOUNT: 1 (1 Question, no change here)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            1          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  1|   ANCOUNT: 0 (1 Answer)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            0          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|   NSCOUNT (same as before, not important to us)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |            0          |            0          |
+  |            =          |            =          |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|   ARCOUNT (zeroed out)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>All together looks like this:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">163</span><span class="w"> </span><span class="mf">155</span><span class="w"> </span><span class="mf">128</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span>
+</code></pre></div>
+
+<h4>Question Section</h4>
+<p>We need to include the question section, we simply match the same as the one that was provided in the query. So if we add that our response now looks like:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">163</span><span class="w"> </span><span class="mf">155</span><span class="w"> </span><span class="mf">128</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">6</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">114</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">109</span><span class="w"> </span><span class="mf">105</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">9</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">99</span><span class="w"> </span><span class="mf">97</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">104</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">115</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<h4>Answer Section</h4>
+<p>Now we need to include a new section that contains the answer, where the client should actually resolve to. According to the <a href="https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3">RFC</a> the answer section is formatted like so:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                                               |
+  /                                               /
+  /                      NAME                     /
+  |                                               |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                      TYPE                     |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                     CLASS                     |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                      TTL                      |
+  |                                               |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |                   RDLENGTH                    |
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--|
+  /                     RDATA                     /
+  /                                               /
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>You’ll notice it contains the NAME, TYPE and CLASS similar to the question section. To avoid repeating all that name data, we can actually include a pointer in the message that points to the data in the question section in order to read it, this is called <a href="https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4">message compression</a>.</p>
+<p>To represent a pointer, it consists of 2 bytes (octets), where the first 2 bits are always <code>1</code>s, followed by an offset from the first byte of the message to reach the beginning of the NAME portion. In this example, that offset is <code>12</code> so here is how the pointer looks like:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           192         |           12          |
+  |            =          |           =           |
+  | 1  1| 0  0  0  0  0  0| 0  0  0  0  1  1  0  0|   (pointer with offset = 12)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>Since we are using the compressed message format, we no longer need to include the NAME section. So we can skip it and add the TYPE and CLASS sections, they should match the values in the question section. Here’s how they’re represented in bytes starting with the pointer offset:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">192</span><span class="w"> </span><span class="mf">12</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<p>Next we include a TTL, we’ll set it to <code>3600</code> (1 hour in seconds), which is represented by 32 bits (4 bytes):</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           0           |           0           |
+  |           =           |           =           |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           14          |           16          |
+  |           =           |           =           |
+  | 0  0  0  0  1  1  1  0| 0  0  0  1  0  0  0  0|   (represents 3600 in Big Endian)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>Let’s add the TTL to the bytes above:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">192</span><span class="w"> </span><span class="mf">12</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">14</span><span class="w"> </span><span class="mf">16</span>
+</code></pre></div>
+
+<p>Now add it to the response we have been constructing above:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">163</span><span class="w"> </span><span class="mf">155</span><span class="w"> </span><span class="mf">128</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">6</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">114</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">109</span><span class="w"> </span><span class="mf">105</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">9</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">99</span><span class="w"> </span><span class="mf">97</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">104</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">115</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">192</span><span class="w"> </span><span class="mf">12</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">14</span><span class="w"> </span><span class="mf">16</span>
+</code></pre></div>
+
+<p>The final 2 sections represent the actual answer. The first one, RDLENGTH, represents the length of the address that should be resolved to in bytes. Since we are always returning the IPv6 loopback address (::1), they are represented by 128 bits (16 bytes) which means we can simply add <code>16</code> as the RDLENGTH:</p>
+<div class="codehilite"><pre><span></span><code>    0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           0           |           0           |
+  |           =           |           =           |
+  | 0  0  0  0  0  0  0  0| 0  0  0  0  0  0  0  0|
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+  |           0           |           16          |
+  |           =           |           =           |
+  | 0  0  0  0  0  0  0  0| 0  0  0  1  0  0  0  0|   (represents 16 in Big Endian)
+  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+</code></pre></div>
+
+<p>Finally we want to add RDATA, which would be the IPv6 loopback address. As we discussed the <code>::1</code> is represented by 16 bytes, all of them are zeroed out except the last, which just contains the value <code>1</code>, so in bytes it simply looks like this:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<p>To conclude the last part of constructing the response, lets add both RDLENGTH and RDATA to the response sequence we have:</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">163</span><span class="w"> </span><span class="mf">155</span><span class="w"> </span><span class="mf">128</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">6</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">114</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">109</span><span class="w"> </span><span class="mf">105</span><span class="w"> </span><span class="mf">122</span><span class="w"> </span><span class="mf">9</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">99</span><span class="w"> </span><span class="mf">97</span><span class="w"> </span><span class="mf">108</span><span class="w"> </span><span class="mf">104</span><span class="w"> </span><span class="mf">111</span><span class="w"> </span><span class="mf">115</span><span class="w"> </span><span class="mf">116</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">192</span><span class="w"> </span><span class="mf">12</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">28</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">14</span><span class="w"> </span><span class="mf">16</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">16</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">0</span><span class="w"> </span><span class="mf">1</span>
+</code></pre></div>
+
+<p>Here’s a summary of what this response means (in human form :D):</p>
+<ul>
+<li>ID: 0xA39B</li>
+<li>Flags: Response, No error.</li>
+<li>Question: trzmiz.localhost (AAAA query for IPv6 address).</li>
+<li>Answer:<ul>
+<li>Name: trzmiz.localhost</li>
+<li>Type: AAAA</li>
+<li>Class: IN</li>
+<li>TTL: 3600 seconds</li>
+<li>IPv6 Address: ::1 (loopback)</li>
+</ul>
+</li>
+</ul>
+<h3>Sending Response</h3>
+<p>If you remember, before embarking on this DNS journey, we had the basic outline for the DNS server, that just accepted connections and read message data. The code that handles constructing the response and sending it back is implemented exactly how I described it above, appending the different bytes together. Once the response bytes have been constructed, I simply send it back to the same UDP connection.</p>
+<p>Here is the updated DNS server code along with the function that constructs the response:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">StartDnsServer</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">addr</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ResolveUDPAddr</span><span class="p">(</span><span class="s">&quot;udp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">LOCALHOST_DNS_SERVER</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to resolve UDP Address&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">udpConn</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">net</span><span class="p">.</span><span class="nx">ListenUDP</span><span class="p">(</span><span class="s">&quot;udp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">addr</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to start Basic DNS server&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">buffer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="mi">512</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">udpWriteAddr</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">udpConn</span><span class="p">.</span><span class="nx">ReadFromUDP</span><span class="p">(</span><span class="nx">buffer</span><span class="p">)</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to read from UDP connection&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="k">go</span><span class="w"> </span><span class="nx">handleDnsConn</span><span class="p">(</span><span class="nx">udpConn</span><span class="p">,</span><span class="w"> </span><span class="nx">buffer</span><span class="p">,</span><span class="w"> </span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">udpWriteAddr</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Handles building and returning the response for the DNS request, that resolves to ::1</span>
+<span class="c1">// For more details on the message format: https://datatracker.ietf.org/doc/html/rfc1035#autoid-39</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">handleDnsConn</span><span class="p">(</span><span class="nx">udpConn</span><span class="w"> </span><span class="o">*</span><span class="nx">net</span><span class="p">.</span><span class="nx">UDPConn</span><span class="p">,</span><span class="w"> </span><span class="nx">buffer</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="nx">n</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="nx">udpWriteAddr</span><span class="w"> </span><span class="o">*</span><span class="nx">net</span><span class="p">.</span><span class="nx">UDPAddr</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Extracting information from DNS request</span>
+<span class="w">    </span><span class="nx">transactionID</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">buffer</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+<span class="w">    </span><span class="nx">questionsCount</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">buffer</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span>
+<span class="w">    </span><span class="nx">authorityRRs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">buffer</span><span class="p">[</span><span class="mi">8</span><span class="p">:</span><span class="mi">10</span><span class="p">]</span>
+<span class="w">    </span><span class="nx">msgQuestion</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">buffer</span><span class="p">[</span><span class="mi">12</span><span class="p">:</span><span class="nx">n</span><span class="p">]</span>
+
+<span class="w">    </span><span class="c1">// Building DNS response</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="p">{}</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">transactionID</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Response flag</span>
+<span class="w">    </span><span class="nx">respFlag</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">hex</span><span class="p">.</span><span class="nx">DecodeString</span><span class="p">(</span><span class="s">&quot;8000&quot;</span><span class="p">)</span><span class="w"> </span><span class="c1">// Bits: 1000 0000 0000 0000</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">respFlag</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding QuestionsCount</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">questionsCount</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Answers</span>
+<span class="w">    </span><span class="nx">answer</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">hex</span><span class="p">.</span><span class="nx">DecodeString</span><span class="p">(</span><span class="s">&quot;0001&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">answer</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Authorities</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">authorityRRs</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Additionals (there are none)</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+
+<span class="w">    </span><span class="c1">// Adding the Name (eg: ikyx31.localhost)</span>
+<span class="w">    </span><span class="nx">i</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="nx">n</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">hex</span><span class="p">.</span><span class="nx">EncodeToString</span><span class="p">(</span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="p">:</span><span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">])</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&quot;00&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">label</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="p">])</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="nx">labelI</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">i</span><span class="p">;</span><span class="w"> </span><span class="nx">labelI</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="p">(</span><span class="nx">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">label</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w"> </span><span class="nx">labelI</span><span class="o">++</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">labelI</span><span class="p">])</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">i</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">label</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Adding the domain terminator &quot;0x00&quot;</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="p">])</span>
+<span class="w">    </span><span class="nx">i</span><span class="o">++</span>
+
+<span class="w">    </span><span class="c1">// Adding Type</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="p">:</span><span class="nx">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Class</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mi">2</span><span class="p">:</span><span class="nx">i</span><span class="o">+</span><span class="mi">4</span><span class="p">]</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding pointer label and index</span>
+<span class="w">    </span><span class="c1">// See: https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4</span>
+<span class="w">    </span><span class="nx">pointerLabel</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">hex</span><span class="p">.</span><span class="nx">DecodeString</span><span class="p">(</span><span class="s">&quot;C0&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">addrIndex</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">pointerLabel</span><span class="o">...</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="nx">addrIndex</span><span class="p">))</span>
+
+<span class="w">    </span><span class="c1">// Adding Type for answer</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="p">:</span><span class="nx">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding Class for answer</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">msgQuestion</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mi">2</span><span class="p">:</span><span class="nx">i</span><span class="o">+</span><span class="mi">4</span><span class="p">]</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding TTL (in seconds)</span>
+<span class="w">    </span><span class="nx">ttl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span>
+<span class="w">    </span><span class="c1">// Setting it to 1 hour (3600s)</span>
+<span class="w">    </span><span class="nx">binary</span><span class="p">.</span><span class="nx">BigEndian</span><span class="p">.</span><span class="nx">PutUint32</span><span class="p">(</span><span class="nx">ttl</span><span class="p">,</span><span class="w"> </span><span class="mi">3600</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">ttl</span><span class="o">...</span><span class="p">)</span>
+
+<span class="w">    </span><span class="c1">// Adding length of data, since its always ::1 (IPv6) it will be 16 bytes</span>
+<span class="w">    </span><span class="c1">// Represented as 0000000000000001</span>
+<span class="w">    </span><span class="nx">dataLength</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">([]</span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">binary</span><span class="p">.</span><span class="nx">BigEndian</span><span class="p">.</span><span class="nx">PutUint16</span><span class="p">(</span><span class="nx">dataLength</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">dataLength</span><span class="o">...</span><span class="p">)</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">j</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="nx">j</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="mi">15</span><span class="p">;</span><span class="w"> </span><span class="nx">j</span><span class="o">++</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">respBuffer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">append</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nb">byte</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="w">    </span><span class="c1">// Writing the response back to UDP connection</span>
+<span class="w">    </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">udpConn</span><span class="p">.</span><span class="nx">WriteToUDP</span><span class="p">(</span><span class="nx">respBuffer</span><span class="p">,</span><span class="w"> </span><span class="nx">udpWriteAddr</span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="s">&quot;Failed to write UDP response&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>This is the whole thing by the way. Like I said a (very) basic DNS server, that serves 1 purpose, redirecting to localhost.</p>
+<h2>Back to Simulation Tests</h2>
+<p>To refresh our memories a little bit, and so you don’t have to scroll back to the top, we reach the point of trying to make a POST request and verify its request/response header and body content in the simulation test:</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">TestSimulation</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">simulationCancel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">WithCancel</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">())</span>
+
+<span class="w">    </span><span class="nx">localDevServer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">StartLocalDevServer</span><span class="p">()</span>
+<span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Close</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">dnsserver</span><span class="p">.</span><span class="nx">StartDnsServer</span><span class="p">()</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarServer</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">wait</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">NewTimer</span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<span class="w">    </span><span class="o">&lt;-</span><span class="nx">wait</span><span class="p">.</span><span class="nx">C</span>
+<span class="w">    </span><span class="nx">clientUrlCh</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">make</span><span class="p">(</span><span class="kd">chan</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">StartMmarClient</span><span class="p">(</span><span class="nx">simulationCtx</span><span class="p">,</span><span class="w"> </span><span class="nx">clientUrlCh</span><span class="p">,</span><span class="w"> </span><span class="nx">localDevServer</span><span class="p">.</span><span class="nx">Port</span><span class="p">())</span>
+
+<span class="w">    </span><span class="c1">// Wait for tunnel url</span>
+<span class="w">    </span><span class="nx">tunnelUrl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">clientUrlCh</span>
+
+<span class="w">    </span><span class="c1">// Initialize http client</span>
+<span class="w">    </span><span class="nx">client</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">httpClient</span><span class="p">()</span>
+
+<span class="w">    </span><span class="c1">// Perform simulated usage tests</span>
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+<span class="w">    </span><span class="nx">verifyPostRequestSuccess</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">client</span><span class="p">,</span><span class="w"> </span><span class="nx">tunnelUrl</span><span class="p">)</span>
+<span class="w">    </span><span class="c1">// ... some code ...</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>So now that we have the DNS server in place, let’s try to run the simulation test again:</p>
+<p align="middle">
+  <img src="./mmar/devlog-005/tests-pass.png" />
+</p>
+
+<p>It worked! And the test case passed! I can now finally continue building the simulation tests.</p>
+<p>This devlog is already quite long. It kinda represents the rabbit hole I got sucked into just to get the requests to work, but I’m pretty happy with how things turned out and I learned a lot. </p>
+<p>Thanks again for checking this out, hope you enjoyed it, see you in the next one!</p>
+
+
+    </main>
+
+    <footer>
+      <p>
+      Find me on
+        <a href="https://github.com/yusuf-musleh">Github</a> -
+        <a href="https://www.linkedin.com/in/yusufmusleh/">Linkedin</a> - 
+        <a href="https://twitter.com/YusufMusleh">X</a>
+      <br>
+      This website was built with <a href="https://github.com/venthur/blag">blag</a>.
+      </p>
+    </footer>
+  </body>
+
+</html>
