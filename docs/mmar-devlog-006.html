@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="author" content="Yusuf Musleh">
+    <meta name="description" content="Deployment, final touches & preparing to launch.">
+    <link rel="alternate" href="/atom.xml" type="application/atom+xml">
+    <link rel="stylesheet" href="/style.css" type="text/css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <title>Yusuf Musleh | mmar - Devlog 6</title>
+
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_e9dXJZIsCVdHzVkBKZGXklKjLGnmtRLXc4xZEaXUJg2',{api_host:'https://us.i.posthog.com', person_profiles: 'identified_only'
+        })
+</script>
+
+</head>
+
+  <body>
+    <header>
+      <h1><a href="/">Yusuf Musleh</a></h1>
+      <nav>
+        <h2>thoughts and devlogs</h2>
+        <ul>
+          <li><h2><a href="/writings.html">Writings</a></h2></li>
+          <li><h2><a href="/archive.html">Archive</a></h2></li>
+          <li><h2><a href="/tags/">Tags</a></h2></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+    
+
+  
+  <h2>mmar - Devlog 6</h2>
+  
+
+  <aside>
+    <p>published on 2025-02-24
+
+    
+    · tagged with
+      
+        <a href="/tags/devlog.html">#devlog</a>, 
+        <a href="/tags/golang.html">#golang</a>, 
+        <a href="/tags/http.html">#http</a>, 
+        <a href="/tags/mmar.html">#mmar</a> and 
+        <a href="/tags/tunnel.html">#tunnel</a>
+    
+    </p>
+  </aside>
+
+  <p><em>This post is part of a devlog series documenting my progress building <code>mmar</code>, a cross-platform tunnel that exposes your localhost to the world. If you&rsquo;d like to follow along from the beginning, you can find all the devlogs <a href="/tags/mmar.html">here</a>.</em></p>
+<h2>Progress Update</h2>
+<p>I made it to the most exciting part of any project, seeing it come to life and all the pieces falling into place. Setting up the CI, the build and release process, deploying it in the wild and finally having a few beta testers play around with it and report issues they find. I’ll briefly go over these various steps and my preparations to launch.</p>
+<h2>CI and Releasing</h2>
+<p>In the previous <a href="/mmar-devlog-005.html">devlog</a>, I talked about building out simulation tests for mmar. Since then I’ve added quite a bit of test cases which proved to be super useful, as I found a few issues and fixed them.</p>
+<p>Once the tests were running successfully, the next step was to include them as part of continuous integration (CI). Whenever I create a new PR, the simulation tests would run in a Github Action, once they pass, I can safely merge the PR. Otherwise I know something broke. Adding that was quite straightforward, especially since there are no dependancies and I used the built-in testing tool from go: <code>go test</code>.</p>
+<p>Now that I had the tests setup as part of my CI, next, I wanted to automate the release process. Since mmar is cross platform, I definitely did not want to manually build executables for each OS/architecture. This is where <a href="https://goreleaser.com/">GoReleaser</a> comes in. It makes building and releasing cross-platform software a breeze. It allowed me to build mmar for Windows, Mac and Linux, in addition to building and pushing a Docker image and a Homebrew formula to their respective repositories. It uploads all the release artifacts (binaries) to the corresponding Github Release page. All of this is defined in <a href="https://github.com/yusuf-musleh/mmar/blob/master/.goreleaser.yaml">.goreleaser.yaml</a>, the best part is, all of this is free and <a href="https://github.com/goreleaser/goreleaser">open source</a>!</p>
+<p>Similar to tests, I&rsquo;ve created a Github Action that runs the <a href="https://github.com/goreleaser/goreleaser-action">GoReleaser Github Action</a> when a new tag is created and pushed to the mmar repo. Once setup, I all have to do is create a new git tag, example: <code>v0.2.3</code>, and push it to GitHub, and the new release action is triggered, a few seconds later the latest version of mmar is built and available across all the platforms.</p>
+<h2>Deployment</h2>
+<p>Now that I have a docker image built, I can begin deploying mmar on a VPS. If you remember from previous devlogs, when you run the mmar server, it starts both a HTTP server and a TCP server. The HTTP server handles HTTP requests coming into the tunnel, and the TCP server handles communication between the mmar server and mmar client. Since each of these run on a different port, we need to route the requests coming in to the correct server. Not only that, since mmar generates random subdomains for each tunnel created, we need to handle TLS certificates for wildcard subdomains on the <code>mmar.dev</code> domain.</p>
+<p>Given these 2 requirements, <a href="https://caddyserver.com/">Caddy</a> can handle them both for us. It’s a reverse proxy and gives you TLS certificates by default, so we just need to configure Caddy and run it to route the requests to the appropriate servers/ports. So I simply defined a Docker compose file, included the mmar server and the configured Caddy server as services, started the containers, and I was able to create a mmar tunnel!</p>
+<p>If you’re interested in instruction on how to self-host your own mmar server and the configurations I used in more detail, I’ve included the steps to self-host in the <a href="https://github.com/yusuf-musleh/mmar?tab=readme-ov-file#self-host">README</a>.</p>
+<h2>Beta Users + Fixing issues</h2>
+<p>Now that mmar was actually live and usable, the next natural step was to get some folks to use it and get their feedback. I got a few of my developer friends to try it out, thankfully they found a few issues and let me know about them. We did the feedback loop a few times, ironing out any issues or problems they faced. </p>
+<p>Here’s an example of something they found issue with. Every time your computer disconnects or loses internet access, the tunnel disconnects and you needed to manually re-run the client and mmar will give you a different subdomain. So you can imagine how annoying it gets if you have this URL defined somewhere in some other code base that you are using to test, and it keeps changing. So I went ahead and implemented reconnecting mmar clients that maintain the same subdomain as long as you do not shutdown the client yourself. That was a pretty valuable insight I got from having people try it out. </p>
+<h2>Final Preparations</h2>
+<p>Wrapping up this devlop, which will likely be the last one, as the next post will be the launch announcement! All that’s left before then is creating a logo/artwork for the repo, adding a demo gif and ironing out the README. Thanks for reading, and see you in the next one!</p>
+
+
+    </main>
+
+    <footer>
+      <p>
+      Find me on
+        <a href="https://github.com/yusuf-musleh">Github</a> -
+        <a href="https://www.linkedin.com/in/yusufmusleh/">Linkedin</a> - 
+        <a href="https://twitter.com/YusufMusleh">X</a>
+      <br>
+      This website was built with <a href="https://github.com/venthur/blag">blag</a>.
+      </p>
+    </footer>
+  </body>
+
+</html>
