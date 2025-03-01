@@ -1,7 +1,7 @@
 Title: mmar - Devlog 3
 Description: Supporting multiple clients and optimizing messaging protocol.
 Date: 2024-11-08 12:00
-Tags: mmar, golang, devlog
+Tags: mmar, golang, devlog, http, tunnel
 
 *This post is part of a devlog series documenting my progress building `mmar`, a cross-platform tunnel that exposes your localhost to the world. If you'd like to follow along from the beginning, you can find all the devlogs [here](/tags/mmar.html).*
 

@@ -1,7 +1,7 @@
 Title: mmar - Devlog 1
 Description: This is the first of hopefully many devlogs documenting the process of building my new project `mmar`. 
 Date: 2024-10-07 12:00
-Tags: mmar, golang, devlog
+Tags: mmar, golang, devlog, http, tunnel
 
 *This is the first of hopefully many devlogs documenting the process of building my new project `mmar`.*
 
